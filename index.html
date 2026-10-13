@@ -1,1 +1,39 @@
-Handy Toolbox
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#071522" />
+    <script>
+      (() => {
+        let savedTheme = null;
+        try {
+          const storedTheme = window.localStorage.getItem("library-merger-theme");
+          if (storedTheme === "light" || storedTheme === "dark") {
+            savedTheme = storedTheme;
+          }
+        } catch {
+          // Storage can be unavailable; continue with the system preference.
+        }
+
+        let initialTheme = savedTheme;
+        if (!initialTheme) {
+          try {
+            initialTheme = window.matchMedia("(prefers-color-scheme: light)").matches
+              ? "light"
+              : "dark";
+          } catch {
+            initialTheme = "dark";
+          }
+        }
+
+        document.documentElement.dataset.theme = initialTheme;
+      })();
+    </script>
+    <title>Toolbox | JW Library Merger</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

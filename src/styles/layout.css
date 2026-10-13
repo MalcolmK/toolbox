@@ -1,0 +1,85 @@
+/* Shared app-frame layout and shell-level responsive rules. */
+
+.app-shell {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+.app-background {
+  position: fixed;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 74% 14%, var(--color-background-glow-a), transparent 33%),
+    radial-gradient(ellipse at 8% 76%, var(--color-background-glow-b), transparent 35%),
+    radial-gradient(ellipse at 72% 82%, var(--color-background-glow-c), transparent 28%),
+    var(--color-canvas);
+}
+
+.app-orbit {
+  position: absolute;
+  display: block;
+  aspect-ratio: 1;
+  border: 1px solid var(--color-orbit-edge);
+  border-radius: 50%;
+  box-shadow:
+    0 0 3rem var(--color-background-glow-a),
+    inset 0 0 3rem var(--color-orbit-light);
+}
+
+.app-orbit--upper {
+  top: -51vw;
+  right: -18vw;
+  width: 78vw;
+  background: radial-gradient(ellipse at 35% 70%, var(--color-orbit-light), transparent 58%);
+}
+
+.app-orbit--lower {
+  bottom: -55vw;
+  left: -36vw;
+  width: 77vw;
+  background: radial-gradient(ellipse at 68% 30%, var(--color-orbit-light), transparent 58%);
+}
+
+.main-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(3rem, 7.4vh, 4.6rem);
+  min-height: 100vh;
+  padding-top: 17.1vh;
+  padding-bottom: var(--space-12);
+}
+
+.main-content--drawer-open {
+  width: min(63.9vw, 63.25rem);
+  margin-left: max(25.6vw, calc(clamp(17rem, 21.7vw, 22rem) + 1rem));
+}
+
+.main-content--drawer-closed {
+  width: min(calc(100% - 3rem), 70rem);
+  margin-inline: auto;
+}
+
+@media (max-width: 960px) {
+  .main-content,
+  .main-content--drawer-open,
+  .main-content--drawer-closed {
+    width: min(calc(100% - 2rem), 65rem);
+    margin-inline: auto;
+    padding-top: clamp(2rem, 8vh, 4rem);
+  }
+}
+
+@media (max-width: 640px) {
+  .main-content,
+  .main-content--drawer-open,
+  .main-content--drawer-closed {
+    width: calc(100% - 2rem);
+    gap: 2rem;
+  }
+}

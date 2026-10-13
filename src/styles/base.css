@@ -1,0 +1,51 @@
+/* Global browser defaults. Component-specific styles belong in CSS Modules. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  background-color: var(--color-canvas);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+img,
+video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+:focus-visible {
+  outline: var(--focus-outline-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-outline-offset);
+}
