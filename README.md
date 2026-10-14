@@ -41,7 +41,7 @@ The project has no backend. Its production output is static.
 
 ## GitHub Pages
 
-Vite uses `/toolbox/` as its base path in `vite.config.ts`, matching the repository name for the GitHub Pages project site. Create the production build with `npm run build`; the output is written to `dist/`.
+Vite uses `/toolbox/` as its base path in `vite.config.ts`, matching the repository name for the GitHub Pages project site. The GitHub Actions workflow builds the app and deploys `dist/`. In the repository settings, set **Pages → Build and deployment → Source** to **GitHub Actions**. Do not publish the repository root directly: `index.html` there is the Vite source entry and points to uncompiled TypeScript.
 
 ## Project structure
 
