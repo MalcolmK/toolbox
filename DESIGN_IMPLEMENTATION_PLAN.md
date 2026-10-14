@@ -256,7 +256,7 @@ This step remains relevant as a repository-baseline check, but its original “b
 - The project now has a React + TypeScript + Vite scaffold. Root project files include `AGENTS.md`, `DESIGN.md`, `DESIGN_IMPLEMENTATION_PLAN.md`, `CHANGELOG.md`, both theme reference images, `index.html`, `package.json`, `package-lock.json`, `vite.config.ts`, `tsconfig.json`, `.nvmrc`, and `.gitignore`.
 - Application source is under `src/`: `App.tsx`, `App.module.css`, `main.tsx`, `data/tools.ts`, and `styles/{tokens.css,base.css,layout.css,index.css}`. There is no `public/` directory or separate test setup yet. The current app has the shell, drawer/theme controls, and the beginnings of the Toolbox list; remaining cards and prototype screens are future steps.
 - `package-lock.json` is the single lockfile, so continue using npm. `package.json` scripts are `npm run dev`, `npm run build` (`tsc --noEmit && vite build`), and `npm run preview`. `.nvmrc` selects Node 22; the verified runtime is Node `v22.23.3` with npm `10.9.9`. The engine range is `^20.19.0 || >=22.12.0`.
-- Vite is configured with the GitHub Pages project base `/LibraryMerger/`. The actual GitHub repository slug has not been verified in this inspection, so confirm that it matches before deployment. No Git command-line or Git client was used; continue with the documented GitHub.com workflow.
+- Vite is configured with the GitHub Pages project base `/toolbox/`, matching the repository slug supplied by the user. Continue with the documented GitHub.com workflow.
 - Global CSS is imported once by `src/main.tsx` through `src/styles/index.css`. Shared spacing, typography, accent primitives, semantic light/dark colors, and other design tokens live in `tokens.css`; component-specific styling uses `App.module.css`. The displayed version is sourced from `package.json`; the current version is `0.1.3`, and `CHANGELOG.md` contains the implementation rounds through that version.
 - `node_modules/` and `dist/` currently exist as generated/installed directories and are excluded by `.gitignore`; treat them as build/runtime output, not project source. The source inventory found no additional application, deployment workflow, or test configuration.
 - The supplied screenshots remain the composition reference. Keep all project-facing copy in English, including **New Tool**. Continue to honor the user-provided `AGENTS.md`: static GitHub Pages, responsive and keyboard-operable UI, current Safari/Chrome/Edge support, client-side-only file handling in the later functional phase, and no backend/account/database unless requested.
@@ -503,7 +503,7 @@ At the start of this step the environment had Node.js 20.15.0 and npm 10.7.0. Th
 #### Substeps
 
 1. **Create the minimal app scaffold.** Add the Vite HTML entry, React/TypeScript entry point, app component, Vite React plugin configuration, package scripts, TypeScript configuration, npm lockfile, and `.gitignore`. Use npm consistently. Add only React, React DOM, Vite, the React Vite plugin, TypeScript, and React type packages required by this setup.
-2. **Set project runtime and deployment assumptions.** Declare the minimum supported Node version in `package.json` and a Node 22 version file. Configure Vite's static `base` for the repository project path (`/LibraryMerger/` based on this workspace name) and leave a clear note that it must track the GitHub repository name if that name changes.
+2. **Set project runtime and deployment assumptions.** Declare the minimum supported Node version in `package.json` and a Node 22 version file. Configure Vite's static `base` for the repository project path (`/toolbox/`) and keep it aligned with the GitHub repository name if that name changes.
 3. **Connect the CSS entry once.** Import `src/styles/index.css` exactly once from `src/main.tsx`. Do not import `tokens.css`, `base.css`, or `layout.css` separately from the app or components.
 4. **Create a semantic app frame.** Use one app root, a main content area, the shared header, a decorative background layer, and the reserved work-surface area. Give the page an English document title and `lang="en"`.
 5. **Apply the theme root contract.** Start in dark theme to match the primary reference and set `data-theme` on `<html>`. Keep theme persistence and system preference selection for Step 8.
@@ -520,7 +520,7 @@ At the start of this step the environment had Node.js 20.15.0 and npm 10.7.0. Th
 
 #### Current setup note
 
-During implementation, confirm the repository's actual GitHub Pages project path before publishing. The scaffold uses `/LibraryMerger/` from the current workspace name as the initial Vite `base`; if the repository slug differs, correct that single value before deployment.
+The confirmed GitHub Pages project path is `/toolbox/`, matching the repository slug. Keep Vite's `base` aligned if the repository name changes.
 
 #### Step 4 execution record
 
@@ -782,9 +782,9 @@ This step remains relevant as the integration and release-readiness check. Expan
 - Confirmed the project has no configured test script and no installed Vitest/Playwright packages. No testing dependency or test-only code was added.
 - `npm run build` passed: TypeScript `tsc --noEmit` and Vite 8.3.4 production build completed successfully.
 - Microsoft Edge 155 production-preview checks passed for direct `#merge-preview` entry and refresh, Preview Merge/back navigation, Light theme selection and persistence after refresh, placeholder dialog opening, and Escape dismissal.
-- The static preview at `/LibraryMerger/` returned HTTP 200. The generated JS and CSS references both used `/LibraryMerger/assets/` and returned HTTP 200. Refreshing `#merge-preview` kept the hash and rendered the illustrative sample notice.
+- The static preview at `/toolbox/` returned HTTP 200. The generated JS and CSS references both used `/toolbox/assets/` and returned HTTP 200. Refreshing `#merge-preview` kept the hash and rendered the illustrative sample notice.
 - Step 10 recorded responsive Edge measurements at 320/360/768/960/961/1024/1440 px in both themes across all three routes, plus drawer reachability at 320 px height and reduced-motion behavior.
-- No Chromium/Chrome installation, Playwright/WebKit setup, Apple Safari, Mac, or screen reader was available. The local checkout has no `.git/config`, so the remote GitHub repository slug could not be confirmed; `/LibraryMerger/` remains based on the workspace/project name and must be compared with the repository slug before publishing.
+- No Chromium/Chrome installation, Playwright/WebKit setup, Apple Safari, Mac, or screen reader was available. The local checkout has no `.git/config`; the user later confirmed the repository slug is `toolbox`, so the configured `/toolbox/` path matches it.
 - Confirmed the checked-in source still contains no file input or real file-processing workflow. No implementation change was needed for Step 11, so no version bump was made.
 
 **Checkpoint:** production build and available Edge/static-base-path checks pass. Coverage and deployment items that require other browsers, devices, assistive technology, or repository metadata are explicitly recorded for follow-up.
@@ -818,7 +818,7 @@ This step remains relevant as the final cleanup and handoff gate. Add explicit c
   - `package-lock.json` → `package-lock.json`
   - `CHANGELOG.md` → `CHANGELOG.md`
   - `DESIGN_IMPLEMENTATION_PLAN.md` → `DESIGN_IMPLEMENTATION_PLAN.md` (updated verification and handoff records)
-- No remote repository metadata is present in this checkout, so the `/LibraryMerger/` base path must still be compared with the GitHub repository slug before publishing. Chrome/Chromium, WebKit, Safari, assistive technology, and physical-device coverage remain unverified as recorded in Step 11.
+- No remote repository metadata is present in this checkout; the user confirmed that `/toolbox/` matches the repository slug. Chrome/Chromium, WebKit, Safari, assistive technology, and physical-device coverage remain unverified as recorded in Step 11.
 - No commit or deployment was made. Use GitHub.com's upload/edit flow and **Commit changes** after confirming the repository slug and reviewing the files.
 
 **Checkpoint:** the prototype is cleaned and version-consistent at `0.1.12`; real versus mock behavior and the release file list are documented. The remaining publishing and platform checks are visible handoff items rather than assumed successes.
@@ -908,8 +908,8 @@ This step remains relevant as the release-readiness audit for the design prototy
 - [x] No actual files are read, uploaded, transformed, or downloaded.
 - [x] Phone, tablet, and wide desktop layouts avoid clipping and horizontal scrolling at the recorded Edge sizes.
 - [x] Focus, contrast, reduced motion, and accessible labels have been reviewed in source/Edge; screen-reader testing is still outstanding.
-- [x] Static GitHub Pages output and the configured `/LibraryMerger/` base path have been checked locally.
-- [ ] Confirm `/LibraryMerger/` matches the actual GitHub repository slug before publishing; repository metadata is not available in this checkout.
+- [x] Static GitHub Pages output and the configured `/toolbox/` base path have been checked locally.
+- [x] The user confirmed `/toolbox/` matches the GitHub repository slug.
 - [x] Version and changelog are updated together for the completed implementation round (`0.1.12`).
 
 ### Checks that require another environment
@@ -932,7 +932,7 @@ This step remains relevant as the release-readiness audit for the design prototy
 
 - Reconciled this checklist with the current source and found the root `README.md` was still in Dutch and described theme choice as session-only. Rewrote it in English and corrected the status to match the current prototype: system preference on first visit, locally remembered explicit choice, sample-only merger screens, and no file-processing behavior.
 - Confirmed `package.json` and `CHANGELOG.md` both identify version `0.1.12`; the drawer reads the version from `package.json`. `.nvmrc` selects Node 22, and the package supports Node `^20.19.0 || >=22.12.0`.
-- Confirmed `vite.config.ts` uses `/LibraryMerger/`. The actual GitHub repository slug remains unverified because repository metadata is unavailable; this is now an unchecked pre-publication item rather than a completed requirement.
+- Confirmed `vite.config.ts` uses `/toolbox/`, matching the repository slug supplied by the user.
 - Reviewed the current React routes and controls against the walkthrough: Toolbox, `#library-merger`, `#merge-preview`, drawer/theme controls, sample-only preview, and placeholder dialog are present. Source inspection shows theme initialization reads the saved theme or system preference, and explicit theme changes write only the theme value to local storage.
 - Re-ran the prototype-boundary source search. No file input, file-reading API, JSON/ZIP processor, upload/download flow, or runtime network request was found in application source. The theme preference is the only intended browser persistence.
 - The fresh production build passed with Node.js 22.23.3: TypeScript checking completed and Vite 8.3.4 generated the static output in `dist/`.
@@ -954,7 +954,7 @@ This step remains relevant as the boundary between the clickable design prototyp
 5. **Add only phase-appropriate dependencies.** Use the project's existing React/TypeScript/Vite/npm setup. Add JSZip only when ZIP support is actually implemented and record its practical benefit. Add Vitest for isolated processing tests and Playwright for key browser flows as required by `AGENTS.md`; explain and keep dependency changes minimal. Do not maintain a second lockfile.
 6. **Build representative fixtures and failure cases.** Add clearly licensed or project-created valid JSON/ZIP fixtures plus malformed, unsupported, empty, duplicate, and relevant boundary cases based on the agreed input contract. Never check in real user libraries, secrets, or private data. Tests must prove errors are understandable and do not mutate source files.
 7. **Design the real workflow states.** Extend the prototype screens with accessible source selection, validation/loading/error states, a reviewable merge result, and an explicit output/download action only after merge semantics are agreed. Preserve light/dark tokens, keyboard operation, reduced motion, responsive behavior, and clear no-network/local-processing copy. Keep sample-only labels on fixtures and test examples.
-8. **Verify browser and static-host behavior.** Run the build and the Vitest/Playwright suites, then cover Chromium, WebKit, and Edge when available. Verify important file flows in actual Safari on a Mac when available. Confirm `/LibraryMerger/` against the actual GitHub repository slug before publishing; do not treat a local preview or Edge as proof of the other environments.
+8. **Verify browser and static-host behavior.** Run the build and the Vitest/Playwright suites, then cover Chromium, WebKit, and Edge when available. Verify important file flows in actual Safari on a Mac when available. Keep `/toolbox/` aligned with the GitHub repository slug; do not treat a local preview or Edge as proof of the other environments.
 9. **Release and hand off the functional change separately.** Update `package.json`, `package-lock.json`, and `CHANGELOG.md` together for each implementation round, keep the displayed app version package-sourced, list every changed file and destination path, record exact test/platform limitations, and use the user's GitHub.com upload/edit plus **Commit changes** workflow. Do not claim commit or publication without evidence.
 
 ### Decisions required before functional coding
@@ -971,4 +971,11 @@ The repository guidance establishes browser-local JSON/ZIP handling, but the des
 - This handoff was clarified as documentation only. No functional code, dependency, app version, or changelog entry was changed; no commit or deployment was made.
 
 **Checkpoint:** the next phase now has an explicit entry gate, required product decisions, architecture/privacy boundaries, dependency/testing expectations, fixture guidance, browser coverage, and release handoff. The current phase remains design-only until a separate functional task is authorized and its merge contract is agreed.
+
+### Deployment follow-up — 2026-10-14
+
+- The user confirmed the GitHub repository is `toolbox`; Vite's `/toolbox/` base path matches the published project URL.
+- Added `.github/workflows/deploy.yml` to build the app and publish the generated `dist/` directory through GitHub Pages. GitHub Pages must use **GitHub Actions** as its source for this workflow to deploy.
+- The checked-in root `index.html` is Vite's source entry and points to `/src/main.tsx`. The workflow builds that source into browser-ready files before publishing. Older local `dist/` files are replaced during that build and are not deployed directly.
+- The workflow and deployment have not yet been confirmed on GitHub; commit the workflow and select the Actions source in Pages settings, then check the Actions run.
 

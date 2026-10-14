@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.15 — 2026-10-14
+
+- Updated the implementation plan to use the confirmed `/toolbox/` Pages path and clarified that GitHub Actions publishes a fresh build from `dist/`.
+
+## 0.1.14 — 2026-10-14
+
+- Added a GitHub Actions workflow that builds the Vite app and deploys the production output to GitHub Pages.
+
 ## 0.1.13 — 2026-10-14
 
 - Corrected the GitHub Pages base path to match the `toolbox` repository.
