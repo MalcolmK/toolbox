@@ -1,25 +1,35 @@
 {
   "name": "library-merger-toolbox",
   "private": true,
-  "version": "0.1.17",
+  "version": "0.2.0",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "dev": "vite --configLoader native",
+    "build": "tsc --noEmit && vite build --configLoader native",
+    "preview": "vite preview --configLoader native",
+    "test": "vitest run --configLoader native --pool=threads",
+    "test:e2e": "playwright test",
+    "test:e2e:edge": "playwright test --project=msedge",
+    "test:e2e:webkit": "playwright test --project=webkit",
+    "fixtures:jw-library": "node tests/fixtures/jw-library/generate-fixtures.mjs"
   },
   "dependencies": {
+    "jszip": "^3.10.2",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "sql.js": "^1.14.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-react": "^6.1.2",
     "typescript": "~6.0.2",
-    "vite": "^8.3.3"
+    "vite": "^8.3.3",
+    "vitest": "^5.0.4"
   }
 }

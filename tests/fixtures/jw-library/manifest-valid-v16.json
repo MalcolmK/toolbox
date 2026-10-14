@@ -1,0 +1,13 @@
+{
+  "type": 0,
+  "name": "synthetic-jw-library-fixture.jwlibrary",
+  "creationDate": "2026-10-14T12:00:00+0000",
+  "userDataBackup": {
+    "schemaVersion": 16,
+    "lastModifiedDate": "2026-10-10T10:00:00Z",
+    "deviceName": "Synthetic fixture device",
+    "databaseName": "userData.db",
+    "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "version": 1
+}

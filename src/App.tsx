@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import packageInfo from "../package.json";
 import { toolboxEntries } from "./data/tools";
+import { LibraryMergerPage } from "./tools/jw-library-merger/components/LibraryMergerPage";
 import styles from "./App.module.css";
 
 type Theme = "light" | "dark";
-type AppRoute = "toolbox" | "library-merger" | "merge-preview";
+type AppRoute = "toolbox" | "library-merger";
 const THEME_STORAGE_KEY = "library-merger-theme";
 
 function routeFromHash(): AppRoute {
   if (window.location.hash === "#library-merger") return "library-merger";
-  if (window.location.hash === "#merge-preview") return "merge-preview";
   return "toolbox";
 }
 
@@ -69,37 +69,11 @@ function ToolboxIcon() {
   );
 }
 
-function ArrowRightIcon() {
-  return (
-    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path d="M4 12h15m-6-6 6 6-6 6" />
-    </svg>
-  );
-}
-
 function ArrowLeftIcon() {
   return (
     <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
       <path d="M20 12H5m6 6-6-6 6-6" />
     </svg>
-  );
-}
-
-function SourceLibraryPanel({ letter }: { letter: "A" | "B" }) {
-  const headingId = `sample-library-${letter.toLowerCase()}-heading`;
-
-  return (
-    <article className={styles.sourcePanel} aria-labelledby={headingId}>
-      <div className={styles.sourcePanelHeader}>
-        <h3 className={styles.sourcePanelTitle} id={headingId}>Library {letter}</h3>
-        <span className={styles.sampleBadge}>Sample</span>
-      </div>
-      <span className={styles.sourceBookIcon}>
-        <BookIcon />
-      </span>
-      <p className={styles.sourceLibraryName}>Sample Library {letter}</p>
-      <p className={styles.sourceLibraryCaption}>Visual placeholder</p>
-    </article>
   );
 }
 
@@ -283,13 +257,7 @@ function App() {
           <a
             className={styles.toolNavigation}
             href="#library-merger"
-            aria-current={
-              route === "library-merger"
-                ? "page"
-                : route === "merge-preview"
-                  ? "location"
-                  : undefined
-            }
+            aria-current={route === "library-merger" ? "page" : undefined}
             onClick={closeNavigation}
           >
             <span className={styles.bookIcon}>
@@ -412,82 +380,11 @@ function App() {
               )}
             </section>
           </>
-        ) : route === "library-merger" ? (
-          <section
-            className={`${styles.workSurface} ${styles.workflowSurface}`}
-            aria-labelledby="workflow-heading"
-          >
-            <div className={styles.workflowHeading}>
-              <h1
-                className={styles.sectionTitle}
-                id="workflow-heading"
-                ref={route === "library-merger" ? routeHeadingRef : undefined}
-                tabIndex={-1}
-              >
-                Source libraries
-              </h1>
-              <p className={styles.sectionIntro}>Review the two sample sources before opening the preview.</p>
-            </div>
-            <div className={styles.sourcePair} role="group" aria-label="Sample source libraries">
-              <SourceLibraryPanel letter="A" />
-              <span className={styles.mergeConnector} aria-hidden="true"><ArrowRightIcon /></span>
-              <SourceLibraryPanel letter="B" />
-            </div>
-            <div className={styles.workflowActions}>
-              <a
-                className={styles.primaryAction}
-                href="#merge-preview"
-                onClick={closeNavigation}
-              >
-                Preview Merge
-              </a>
-            </div>
-            <p className={styles.prototypeNote}>Design prototype. Sample content only; no files are selected or processed.</p>
-          </section>
         ) : (
-          <section
-            className={`${styles.workSurface} ${styles.workflowSurface} ${styles.previewSurface}`}
-            aria-labelledby="preview-heading"
-          >
-            <div className={styles.prototypeNotice} role="status">
-              <strong>Prototype preview</strong>
-              <span>Sample content only. No files have been processed.</span>
-            </div>
-            <div className={styles.workflowHeading}>
-              <h1
-                className={styles.sectionTitle}
-                id="preview-heading"
-                ref={route === "merge-preview" ? routeHeadingRef : undefined}
-                tabIndex={-1}
-              >
-                Merge preview
-              </h1>
-              <p className={styles.sectionIntro}>Illustrative view of a combined library.</p>
-            </div>
-            <div
-              className={styles.previewFlow}
-              role="group"
-              aria-label="Illustrative preview sources and result"
-            >
-              <span className={styles.previewSource}>Sample Library A</span>
-              <span className={styles.mergeConnector} aria-hidden="true"><ArrowRightIcon /></span>
-              <span className={styles.previewSource}>Sample Library B</span>
-              <span className={styles.mergeConnector} aria-hidden="true"><ArrowRightIcon /></span>
-              <div className={styles.previewResult}>
-                <span className={styles.previewResultIcon}><BookIcon /></span>
-                <span>
-                  <strong>Combined library</strong>
-                  <small>Illustrative result</small>
-                </span>
-              </div>
-            </div>
-            <div className={styles.workflowActions}>
-              <a className={styles.primaryAction} href="#library-merger" onClick={closeNavigation}>
-                <ArrowLeftIcon />
-                <span>Back to edit</span>
-              </a>
-            </div>
-          </section>
+          <LibraryMergerPage
+            surfaceClassName={`${styles.workSurface} ${styles.workflowSurface}`}
+            headingRef={route === "library-merger" ? routeHeadingRef : undefined}
+          />
         )}
       </main>
 
