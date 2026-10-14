@@ -24,7 +24,7 @@ export interface SimpleMergePreview {
 
 export interface AdvancedMergePreview {
   /** A comparison ancestor only; output candidates remain A and B. */
-  readonly baseSource: PreparedMergeSource | null;
+  readonly baseSource: Omit<PreparedMergeSource, "archive"> | null;
   readonly sources: readonly [PreparedMergeSource, PreparedMergeSource];
   readonly comparison: ThreeWayComparison;
 }
@@ -142,9 +142,12 @@ export async function prepareAdvancedMerge(
   const baseSource = baseFile ? prepared[0]! : null;
   const offset = baseFile ? 1 : 0;
   const sources = [prepared[offset]!, prepared[offset + 1]!] as const;
+  const comparisonBase = baseSource
+    ? { fileName: baseSource.fileName, schemaVersion: baseSource.schemaVersion, snapshot: baseSource.snapshot }
+    : null;
   return {
-    baseSource,
+    baseSource: comparisonBase,
     sources,
-    comparison: compareThreeWay(sources[0].snapshot, sources[1].snapshot, baseSource?.snapshot ?? null),
+    comparison: compareThreeWay(sources[0].snapshot, sources[1].snapshot, comparisonBase?.snapshot ?? null),
   };
 }

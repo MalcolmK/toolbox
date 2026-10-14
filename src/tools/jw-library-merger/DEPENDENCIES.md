@@ -30,7 +30,9 @@ needed or uploaded. Run the Vite development server and open:
 This check validates package loading and the local WebAssembly asset. It does
 not prove that sql.js preserves every JW Library schema object, that rewritten
 databases are accepted by JW Library, or that the manifest hash is correct.
-Those remain separate checks before output generation is implemented.
+Database and guarded ZIP output are implemented, but production download must
+remain blocked until the hash rule is established and a generated archive is
+validated with JW Library.
 
 The check passed in Microsoft Edge against both the Vite development server
 and an isolated production preview. The production preview emitted the WASM

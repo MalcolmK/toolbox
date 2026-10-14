@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import initSqlJs, { type SqlJsStatic } from "sql.js";
 import { describe, expect, it } from "vitest";
-import { prepareSimpleMerge } from "../../../src/tools/jw-library-merger/merge/prepareSimpleMerge";
+import { prepareAdvancedMerge, prepareSimpleMerge } from "../../../src/tools/jw-library-merger/merge/prepareSimpleMerge";
 
 const fixtureUrl = (name: string) => new URL(`../../fixtures/jw-library/${name}`, import.meta.url);
 const sqliteWasm = new URL("../../../node_modules/sql.js/dist/sql-wasm.wasm", import.meta.url);
@@ -37,6 +37,51 @@ describe("prepareSimpleMerge", () => {
       checks: [
         { source: "A", valid: true, schemaVersion: 16, error: null },
         { source: "B", valid: false, schemaVersion: null, error: expect.stringContaining("manifest.json") },
+      ],
+    });
+  });
+});
+
+describe("prepareAdvancedMerge", () => {
+  it("uses an optional base for comparison while keeping A and B as the only merge sources", async () => {
+    const base = await fixtureFile("base.jwlibrary");
+    const fileA = await fixtureFile("modified-note-newer.jwlibrary");
+    const fileB = await fixtureFile("base.jwlibrary");
+
+    const result = await prepareAdvancedMerge(fileA, fileB, base, sqliteLoader);
+
+    expect(result.baseSource?.fileName).toBe("base.jwlibrary");
+    expect(result.sources.map((source) => source.fileName)).toEqual([
+      "modified-note-newer.jwlibrary",
+      "base.jwlibrary",
+    ]);
+    expect(result.comparison.baseFileName).toBe("base.jwlibrary");
+    expect(result.comparison.records.find((record) => record.tableName === "Note")?.outcome)
+      .toBe("changed-in-a");
+  });
+
+  it("supports two-way advanced comparison when no base file is selected", async () => {
+    const fileA = await fixtureFile("conflict-source-a.jwlibrary");
+    const fileB = await fixtureFile("conflict-source-b.jwlibrary");
+
+    const result = await prepareAdvancedMerge(fileA, fileB, null, sqliteLoader);
+
+    expect(result.baseSource).toBeNull();
+    expect(result.comparison.baseFileName).toBeNull();
+    expect(result.comparison.records.find((record) => record.tableName === "Note")?.conflictStatus)
+      .toBe("possible");
+  });
+
+  it("reports an invalid optional base separately from sources A and B", async () => {
+    const base = await fixtureFile("missing-manifest.jwlibrary");
+    const fileA = await fixtureFile("base.jwlibrary");
+    const fileB = await fixtureFile("base.jwlibrary");
+
+    await expect(prepareAdvancedMerge(fileA, fileB, base, sqliteLoader)).rejects.toMatchObject({
+      checks: [
+        { source: "basis", valid: false, error: expect.stringContaining("manifest.json") },
+        { source: "A", valid: true },
+        { source: "B", valid: true },
       ],
     });
   });

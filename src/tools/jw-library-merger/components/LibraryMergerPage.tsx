@@ -1,4 +1,6 @@
-import { useState, type Ref } from "react";
+import { useRef, useState, type Ref } from "react";
+import { buildSimpleJwLibrary } from "../archive/buildSimpleJwLibrary";
+import type { JwLibraryWriteResult } from "../archive/writeJwLibrary";
 import {
   AdvancedMergeInputError,
   prepareAdvancedMerge,
@@ -9,6 +11,7 @@ import {
   type SimpleMergePreview,
 } from "../merge/prepareSimpleMerge";
 import { AdvancedMergeResults } from "./AdvancedMergeResults";
+import { ArchiveDownload, type ArchiveDownloadSummary } from "./ArchiveDownload";
 import { SimpleMergeResults } from "./SimpleMergeResults";
 import { SourceFilePicker } from "./SourceFilePicker";
 import styles from "./LibraryMergerPage.module.css";
@@ -21,6 +24,29 @@ interface LibraryMergerPageProps {
 type FilePair = [File | null, File | null];
 type CheckPair = [MergeInputCheck | null, MergeInputCheck | null];
 
+function createDownloadSummary(preview: SimpleMergePreview): ArchiveDownloadSummary {
+  const recordsByTable: Record<string, number> = {};
+  for (const record of preview.mergePlan.records) recordsByTable[record.tableName] = (recordsByTable[record.tableName] ?? 0) + 1;
+  const formatOmittedValue = (value: unknown): string => {
+    if (value === undefined) return "ontbrekende waarde";
+    if (value === null) return "lege waarde";
+    if (value instanceof Uint8Array) return `binaire inhoud (${value.byteLength} bytes)`;
+    return String(value);
+  };
+  return {
+    recordCount: preview.mergePlan.records.length,
+    recordsByTable,
+    choices: preview.mergePlan.report.choices.map((choice) =>
+      `${choice.tableName}: ${choice.selectedSource ? `bron ${choice.selectedSource}` : "geen bron geselecteerd"}; ${choice.reason}`),
+    uncertainties: [
+      ...preview.mergePlan.report.warnings,
+      ...preview.mergePlan.report.unresolved.map((record) => `${record.tableName}: ${record.reason}`),
+    ],
+    omissions: preview.mergePlan.report.informationLoss.map((loss) =>
+      `${loss.tableName}.${loss.field}: waarde uit bron ${loss.omittedFrom} niet meegenomen: ${formatOmittedValue(loss.valueNotRetained)} (${loss.reason})`),
+  };
+}
+
 export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMergerPageProps) {
   const [files, setFiles] = useState<FilePair>([null, null]);
   const [checks, setChecks] = useState<CheckPair>([null, null]);
@@ -31,15 +57,23 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [buildStageOpen, setBuildStageOpen] = useState(false);
+  const [buildingArchive, setBuildingArchive] = useState(false);
+  const [archiveWriteResult, setArchiveWriteResult] = useState<JwLibraryWriteResult | null>(null);
+  const [archiveBuildError, setArchiveBuildError] = useState<string | null>(null);
+  const buildGeneration = useRef(0);
   const [mode, setMode] = useState<"simple" | "advanced">("simple");
   const canCompare = files[0] !== null && files[1] !== null && !busy;
   const activePreview = mode === "simple" ? simplePreview : null;
 
   const clearResults = () => {
+    buildGeneration.current += 1;
     setSimplePreview(null);
     setAdvancedPreview(null);
     setError(null);
     setBuildStageOpen(false);
+    setBuildingArchive(false);
+    setArchiveWriteResult(null);
+    setArchiveBuildError(null);
   };
 
   const chooseFile = (index: 0 | 1, file: File | null) => {
@@ -67,10 +101,14 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
     if (!fileA || !fileB) return;
 
     setBusy(true);
+    buildGeneration.current += 1;
     setError(null);
     setSimplePreview(null);
     setAdvancedPreview(null);
     setBuildStageOpen(false);
+    setBuildingArchive(false);
+    setArchiveWriteResult(null);
+    setArchiveBuildError(null);
     setChecks([null, null]);
     if (baseFile) setBaseCheck(null);
 
@@ -114,6 +152,33 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
     } finally {
       setBusy(false);
     }
+  };
+
+  const buildArchive = async () => {
+    if (!activePreview || activePreview.mergePlan.status !== "ready") return;
+    const generation = ++buildGeneration.current;
+    setBuildStageOpen(true);
+    setBuildingArchive(true);
+    setArchiveWriteResult(null);
+    setArchiveBuildError(null);
+    try {
+      const result = await buildSimpleJwLibrary(activePreview);
+      if (generation === buildGeneration.current) setArchiveWriteResult(result);
+    } catch (cause) {
+      if (generation === buildGeneration.current) {
+        setArchiveBuildError(cause instanceof Error ? cause.message : "Het archief kon niet veilig worden opgebouwd.");
+      }
+    } finally {
+      if (generation === buildGeneration.current) setBuildingArchive(false);
+    }
+  };
+
+  const closeBuildStage = () => {
+    buildGeneration.current += 1;
+    setBuildingArchive(false);
+    setArchiveWriteResult(null);
+    setArchiveBuildError(null);
+    setBuildStageOpen(false);
   };
 
   const changeMode = (nextMode: "simple" | "advanced") => {
@@ -187,13 +252,17 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
           )}
           {buildStageOpen && (
             <section className={styles.buildStage} aria-labelledby="build-stage-heading">
-              <h2 id="build-stage-heading">Mergeplan klaar voor de bestandsstap</h2>
-              <p>
-                Er zijn geen open mergekeuzes. Het maken en downloaden van een nieuw .jwlibrary-bestand
-                wordt in een latere stap aangesloten; er is nu nog geen bestand gemaakt.
-              </p>
-              <button className={styles.clearFileButton} type="button" onClick={() => setBuildStageOpen(false)}>
-                Terug naar het mergeplan
+              <h2 id="build-stage-heading">Back-up opbouwen en controleren</h2>
+              {buildingArchive && <p role="status">De database wordt opnieuw gevalideerd en lokaal opgebouwd…</p>}
+              {archiveBuildError && <p className={styles.downloadError} role="alert">{archiveBuildError}</p>}
+              {archiveWriteResult && <ArchiveDownload result={archiveWriteResult} summary={createDownloadSummary(activePreview)} />}
+              {!buildingArchive && !archiveBuildError && !archiveWriteResult && (
+                <button className={styles.actionButton} type="button" onClick={() => void buildArchive()}>
+                  Bestand maken en controleren
+                </button>
+              )}
+              <button className={styles.clearFileButton} type="button" onClick={closeBuildStage}>
+                Terug naar het mergeplan en uitvoer wissen
               </button>
             </section>
           )}

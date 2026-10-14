@@ -221,7 +221,9 @@ the report supports that claim.
 
 ## 8. Unknowns to resolve before writing output
 
-- Exact validation and generation rules for the manifest `hash` field.
+- Exact validation and generation rules for the manifest `hash` field remain
+  unresolved after investigation; see section 10. The manifest builder blocks
+  output until this rule is verified.
 - Whether every supported JW Library schema has the same tables, constraints,
   and content encodings.
 - Whether `Guid` and `UserMarkGuid` remain stable through real backup/restore
@@ -233,3 +235,199 @@ the report supports that claim.
 
 Until these are verified, unknown schema or archive conditions must fail
 closed: explain the limitation and do not offer a potentially lossy output.
+
+## 9. Database build boundary (implementation step 22)
+
+`database/buildMergedDatabase.ts` accepts two validated, read-only source
+connections, their snapshots, and a fully resolved Simple mode merge plan. It
+returns SQLite bytes only after a transaction succeeds. It starts from a byte
+copy of source A's database so the table definitions, constraints, indexes,
+triggers, views, migration table, and other SQLite metadata remain in place.
+The two sources must have the same reviewed schema version and matching table,
+column, foreign-key, and explicit schema-object descriptions.
+
+Before opening the output copy, the builder checks that each source row is
+represented by a selected plan row or by the same explicit logical identity.
+It preallocates output primary keys, records source-local-to-output mappings,
+and rewrites declared foreign keys through those mappings. Duplicate logical
+identities, absent plan decisions, missing references, SQLite constraint
+errors, foreign-key violations, and failed integrity checks block output.
+The original connections and archive bytes are not changed. The selected
+`LastModified` row is updated in place because the observed schema forbids
+deleting or reinserting that singleton.
+
+This builder produces database bytes only. It does not rewrite the manifest or
+validate/calculate its hash. Archive packaging is handled separately in
+section 11. Advanced review currently does not pass its in-page decisions to
+this builder. A plan that still has unresolved identity or record choices is
+deliberately rejected.
+
+## 10. Manifest/hash gate (implementation step 23)
+
+`archive/buildManifest.ts` is the manifest-output gate. It currently returns a
+structured `blocked` result and no manifest object or JSON. The block is
+intentional: the exact rule for `manifest.userDataBackup.hash` is not verified,
+and the original investigation observed that this value stayed the same in the
+two inspected archives even though their database contents differed. Neither
+copying a source value nor choosing a standard digest is safe without knowing
+what JW Library computes and when.
+
+The public third-party reports located during this step conflict. The
+[`braid` project](https://github.com/drg2121/braid) says the field is not a hash
+of the exported database bytes and describes a JW-specific encoding. The
+[`jw-notes-sync` project](https://github.com/DipandaAser/jw-notes-sync) instead
+claims it is SHA-256 of the raw database bytes. Neither is an authoritative JW
+Library specification, and these claims do not establish which behavior
+matches the app versions and platforms this toolbox must support. The hash
+rule remains unresolved until verified against authoritative implementation
+evidence or reproducible exports/restores on supported JW Library versions.
+
+Tests require the gate to return no JSON even when source hashes are present,
+equal, different, or the output database is empty. Later archive packaging
+must call this gate and must stop when its status is `blocked`; it must not
+write a guessed hash or fall back to copying a source hash. This makes the
+current limitation explicit, but it does not yet prove a generated manifest
+is consistent or permit a downloadable merged archive.
+
+## 11. Archive writer (implementation step 24)
+
+`archive/writeJwLibrary.ts` creates a new ZIP from checked database bytes, a
+manifest result, the two original archives, and the selected database's
+`IndependentMedia.FilePath` references. The database builder supplies those
+paths together with the source selected for each media row. The writer excludes
+both original manifests and database entries, copies the selected required
+media payloads, and retains other file entries from both source archives.
+
+The writer deduplicates same-path entries only when their bytes are identical.
+If required media at the same path differs between sources, if unrelated
+entries with the same path differ, or if a required file is missing, it blocks
+the package and reports the path. It does not rename media or rewrite database
+references to resolve a collision. Unsafe paths are rejected, including
+original ZIP names that JSZip has normalized while reading. The output uses a
+new UTC-dated name (`JWLibrary-Merged-YYYY-MM-DD.jwlibrary`) and never replaces
+either source.
+
+Before returning bytes, the writer reopens the ZIP with CRC checking and
+compares the embedded manifest and database bytes with the supplied values. It
+also checks every database-referenced media path is present. The ZIP structure
+is tested with synthetic fixtures only; this does not establish that JW
+Library accepts the archive. The current `buildManifest` still always returns
+`blocked` because the hash rule in section 10 remains unverified, so the
+application cannot currently get a hash-verified manifest or produce this
+archive. The ready-manifest case in writer unit tests is synthetic plumbing to
+exercise ZIP assembly, not evidence that its test hash matches JW Library.
+
+## 12. Download gate (implementation step 25)
+
+`archive/buildSimpleJwLibrary.ts` reconnects the resolved Simple mode plan to
+the output pipeline: it revalidates both retained source archives, builds the
+SQLite database, asks the manifest builder for a verified manifest, and passes
+that result to the archive writer. It closes both temporary SQLite connections
+in a `finally` block. The Advanced mode review is not connected to this output
+pipeline because its in-page decisions do not yet produce a resolved database
+plan.
+
+`components/ArchiveDownload.tsx` enables the standard browser download only
+when the archive writer returns `ready`, which requires database, manifest,
+media, ZIP generation, and round-trip checks to have passed. It creates a Blob
+and temporary object URL on the user's click, names the new file from the
+writer result, and displays merge counts, choices, uncertainties, and omitted
+information after starting the download. Object URLs are revoked after the
+download window or when the component unmounts. A new comparison or cleared
+result drops the previous result state; no user data is stored in
+`localStorage`.
+
+The current manifest builder remains fail-closed, so the UI's output step
+builds and checks the database, then displays the manifest-hash reason and a
+disabled download button. Browser tests verify this blocked state and that no
+download link is created. They cannot verify a successful browser download
+until the hash rule is resolved. The browser UI flows are exercised in
+Chromium and Microsoft Edge, but the successful download path remains
+unreachable. Actual Safari checks and JW Library restore acceptance remain
+later platform checks.
+
+## 13. Download and failure-case tests (implementation step 26)
+
+The automated checks are split by responsibility:
+
+- `readJwLibrary.test.ts` covers malformed ZIPs and manifests, plus missing
+  required archive entries; `validateUserData.test.ts` covers corrupt SQLite,
+  unsupported schema versions, incomplete schema, and broken foreign keys.
+- `simpleMerge.test.ts` checks duplicate stable identities remain unresolved;
+  `buildMergedDatabase.test.ts` verifies unresolved plans cannot produce
+  database bytes. These are the duplicate-identity and unresolved-decision
+  safeguards before archive writing.
+- `writeJwLibrary.test.ts` reopens generated output with CRC checking, compares
+  the manifest/database/media bytes, and checks blocked outcomes for an
+  unverified hash, malformed or inconsistent manifest, empty or unchecked
+  database, missing media, conflicting media payloads, duplicate-path
+  payload conflicts, and unsafe paths. A ready result is possible in this
+  isolated writer test only with a clearly synthetic manifest marked verified;
+  it is not evidence that the production JW hash rule is verified.
+- `simple-merge-workflow.e2e.ts` runs the browser build stage and checks that
+  the production hash block leaves the download button disabled, creates no
+  download link, and sends no request body.
+
+The current manifest builder always fails closed, so malformed-manifest and
+valid-output writer branches that require a verified manifest are tested with
+synthetic writer inputs. No production download can pass until the actual hash
+rule is established. The Playwright UI flows have been run in Chromium and
+Microsoft Edge. Playwright WebKit is not installed in this environment, and
+actual Safari and successful download behavior remain unverified platform
+checks, along with JW Library restore acceptance.
+
+## 14. Full browser workflow (implementation step 27)
+
+`tests/e2e/simple-merge-workflow.e2e.ts` covers synthetic file selection,
+Simple mode comparison, Advanced two- and three-way review, timestamp and
+conflict display, changing a choice after navigating back, block/line text
+decisions, invalid-file feedback, the guarded build/download stage, keyboard
+file selection, theme controls, and responsive layouts at 375, 768, and 1440
+pixels. The suite has six end-to-end tests and passed in both installed
+Chromium and Microsoft Edge.
+
+The build/download flow test verifies the current expected stop: the
+unverified production hash keeps the download disabled, creates no download
+link, and sends no request body. It cannot verify an actual successful
+download. Playwright WebKit and Apple Safari were unavailable for this run;
+real Safari behavior and JW Library restore acceptance remain unverified.
+## 15. JW Library restore acceptance (implementation step 28)
+
+This step remains a required release gate. It cannot be run yet: the
+production manifest builder in step 23 returns `blocked` for every candidate
+because the JW Library hash rule has not been established. The browser can
+therefore produce no production-valid merged `.jwlibrary` file to open in the
+app. A synthetic writer test manifest with `hashVerified: true` is deliberately
+isolated test plumbing and must not be passed off as a valid JW Library test
+backup.
+
+The current Windows environment also has no detected JW Library AppX package
+or Android Debug Bridge, and no iOS/iPadOS device is connected through this
+workspace. No personal backup was used for this step. No claim is made that a
+merged archive has been accepted by JW Library or that all data survives a
+restore.
+
+Once step 23 is verified and a disposable test environment is available, run
+this acceptance sequence using only synthetic content:
+
+1. Create and keep a separate original synthetic `.jwlibrary` fixture with a
+   note, a mark, a range, and a tag/tag-map relationship. Record the expected
+   rows and values before merging.
+2. Make two synthetic candidate backups with known, distinct changes, merge
+   them through the production flow, and require all database, manifest, ZIP,
+   CRC, and referenced-media checks to pass. Confirm the downloaded filename
+   ends in `.jwlibrary`.
+3. Open the merged file in a disposable JW Library test profile or device,
+   without replacing a personal library. Record whether the app accepts it and
+   whether the expected note, mark, range, and tag relationship are present.
+4. Close and reopen the test library, check the same content again, and compare
+   the resulting data with the recorded expectation. Record any rejection,
+   missing value, changed relationship, or unopenable backup as a failed gate.
+5. Preserve the synthetic input fixtures, expected-value record, app/platform
+   version, observed outcome, and any safely redacted diagnostics as test
+   evidence. Do not place personal `.jwlibrary` files in the repository.
+
+**Current outcome:** blocked before archive creation by the unresolved hash
+rule; app acceptance and round-trip data retention are not verified. Do not
+enable a production download or mark step 28 complete until this sequence
+passes.

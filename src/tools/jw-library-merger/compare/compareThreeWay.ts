@@ -134,7 +134,9 @@ function timestampEvidence(
 }
 
 function comparisonsHaveUncertainRelationships(...records: (ComparedRecord | null)[]): boolean {
-  return records.some((record) => record?.relationshipDifferences.some((difference) => difference.status === "uncertain"));
+  return records.some((record) => record?.relationshipDifferences.some((difference) =>
+    difference.status === "uncertain" && difference.identityKeyA !== difference.identityKeyB,
+  ));
 }
 
 function changedRelationshipPaths(...records: (ComparedRecord | null)[]): string[] {
@@ -244,18 +246,12 @@ export function compareThreeWay(
         if (!changedFieldsA.has(field) || !changedFieldsB.has(field) || timestampFields.has(field)) continue;
         if (!valuesEqual(rowA[field], rowB[field])) {
           overlappingChanges.push({
-            granularity: field === "Content" ? "block" : "field",
+            // Note.Content stays opaque field text here; Step 20 adds actual block parsing.
+            granularity: "field",
             path: field,
             reason: `Bron A en bron B hebben ${field} allebei aangepast ten opzichte van de basis en de nieuwe waarden verschillen.`,
           });
         }
-      }
-      if ((!rowA || !rowB) && (changedFieldsA.size > 0 || changedFieldsB.size > 0)) {
-        overlappingChanges.push({
-          granularity: "field",
-          path: "$record-presence",
-          reason: "Een bron verwijdert het record terwijl de andere bron de bestaande inhoud wijzigt.",
-        });
       }
     }
 
@@ -324,8 +320,7 @@ export function compareThreeWay(
             ? "De bronnen hebben verschillende velden aangepast; die wijzigingen kunnen naast elkaar bestaan."
             : outcome === "conflict"
               ? hasBase
-                ? "Beide bronnen hebben hetzelfde veld of blok sinds de basis verschillend aangepast.
-"
+                ? "Beide bronnen hebben hetzelfde veld of blok sinds de basis verschillend aangepast."
                 : "Zonder basisversie is niet vast te stellen of een verschil een gelijktijdig conflict is."
               : outcome === "unchanged"
                 ? "Er is geen inhoudelijke wijziging vastgesteld."
@@ -386,6 +381,50 @@ export function compareThreeWay(
       });
     }
   }
+
+  // Candidate and unidentifiable rows are still surfaced for review. Their
+  // provisional keys may help a person recognize them, but never authorize a
+  // three-way automatic match.
+  comparisonAB.records
+    .filter((record) => record.identityStatus !== "stable")
+    .forEach((record) => {
+      const rowA = record.sourceA?.row ?? null;
+      const rowB = record.sourceB?.row ?? null;
+      const reason = record.uncertaintyReasons.join(" ")
+        || "De recordidentiteit is niet stabiel genoeg voor een automatische driewegvergelijking.";
+      records.push({
+        tableName: record.tableName,
+        logicalIdentity: {
+          key: record.identityKey,
+          confidence: record.identityStatus,
+          strategy: record.identityStrategy,
+        },
+        sourceA: rowA ? source("A", sourceA.sourceFileName, record.tableName, rowA) : null,
+        sourceB: rowB ? source("B", sourceB.sourceFileName, record.tableName, rowB) : null,
+        differences: record.fieldDifferences.map((difference) => ({
+          granularity: "field",
+          path: difference.field,
+          label: difference.field,
+          valueA: mergeValue(difference.valueA),
+          valueB: mergeValue(difference.valueB),
+          baseValue: null,
+          changedFromBase: { A: null, B: null },
+        })),
+        timestamps: [
+          ...timestampEvidence("A", sourceA, rowA, record.tableName),
+          ...timestampEvidence("B", sourceB, rowB, record.tableName),
+          ...(base ? timestampEvidence("basis", base, null, record.tableName) : []),
+        ],
+        proposedAction: null,
+        availableActions: ["take-a", "take-b", "edit-manually"] as const,
+        reason,
+        conflictStatus: "uncertain",
+        baseVersion: base ? source("basis", base.sourceFileName, record.tableName, null) : null,
+        conflictReason: reason,
+        overlappingChanges: [],
+        outcome: "uncertain",
+      });
+    });
 
   const summary = emptySummary();
   for (const record of records) summary[record.outcome] += 1;

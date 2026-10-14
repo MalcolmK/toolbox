@@ -1,6 +1,6 @@
 # Simple mode merge rules
 
-This document defines the automatic policy before Simple mode is implemented. It is the behavior contract for `merge/simpleMerge.ts`; it is not an implementation and does not mutate or rewrite either input. The goal is to retain as much information as possible while choosing the newest version when recency can be established. Every choice that omits a distinct value must be described in the result report.
+This document defines the automatic policy implemented by `merge/simpleMerge.ts`. The planner and its browser workflow compare validated snapshots and prepare source-attributed choices; they do not mutate or rewrite either input. A separate database builder turns a fully resolved Simple mode plan into SQLite bytes after integrity checks, and the local archive/download flow is connected. The production flow currently stops at the fail-closed manifest gate because JW Library's hash rule is unverified. The goal is to retain as much information as possible while choosing the newest version when recency can be established. Every choice that omits a distinct value must be described in the result report.
 
 ## 1. Preconditions and source order
 
@@ -98,7 +98,7 @@ Each case below maps to the numbered rules above. These cases use only the repos
 | Malformed foreign key in an in-memory planner input | Retain the affected source rows for review and prevent a final result; normal validated archive input should be rejected before reaching this planner case. | 2, 5.3, 6 |
 | Duplicate stable identity, unique-key collision, missing parent, or unsupported unknown-table behavior | Do not silently choose or drop rows; withhold the affected output group and report the collision/uncertainty. | 2, 5.3–5.6, 6, 7 |
 
-The `simpleMerge.test.ts` suite covers the timezone, equal-time fallback, manifest fallback, candidate tag, tag-map, duplicate stable identity, linked mark/range, and malformed-link cases above. The malformed-link case directly exercises the pure planner with a deliberately altered in-memory snapshot; it does not bypass archive validation in the product flow. Unknown schema objects and every database-level unique-key collision remain output-builder concerns and must be covered before Simple mode can produce a downloadable archive.
+The `simpleMerge.test.ts` suite covers the timezone, equal-time fallback, manifest fallback, candidate tag, tag-map, duplicate stable identity, linked mark/range, and malformed-link cases above. The malformed-link case directly exercises the pure planner with a deliberately altered in-memory snapshot; it does not bypass archive validation in the product flow. `database/buildMergedDatabase.ts` checks schema agreement, plan coverage, ID/reference remapping, SQLite constraints, integrity, and foreign keys before returning database bytes. The ZIP writer and browser download gate are implemented and covered with synthetic tests. Production download remains disabled until the JW Library manifest/hash rule is verified; the synthetic writer manifest is not evidence of JW Library acceptance.
 
 ## 9. In-memory result contract
 
