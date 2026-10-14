@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0 — 2026-10-14
+
+- Added a dedicated JW Library Merger source structure with documented module boundaries.
+- Documented the observed JW Library database tables, relationships, timestamp semantics, and unresolved format questions.
+- Added JSZip and sql.js for browser-local ZIP and SQLite processing, plus a synthetic local-WASM smoke check.
+- Added reproducible, fully synthetic `.jwlibrary` fixtures for comparison, linked mark/range, and invalid-input scenarios.
+- Added a typed browser-local `.jwlibrary` archive reader with specific input errors, preservation of unknown ZIP entries, and Vitest coverage.
+- Added read-only SQLite validation for schema version 16, including schema shape, integrity, and foreign-key checks with structured failure details.
+- Added a complete typed database snapshot reader that retains unknown tables, binary values, relationships, and explicit schema objects for later comparisons.
+- Added timestamp normalization for explicit timezone formats while preserving source text and keeping archive, database, and note timestamp sources separate.
+- Added per-table record identity rules that separate stable keys, review-only candidates, and source-local integer IDs.
+- Added a read-only two-backup comparison report with equal, one-sided, changed, possible-conflict, and uncertain-linked classifications, relationship tracking, and per-source timestamp summaries.
+- Documented comparison confidence limits and added synthetic fixture coverage for note edits, one-sided records, connected marks and ranges, timestamp retention, and source-local ID handling.
+- Added a Dutch human-readable difference report with understandable statuses, record and field labels, change summaries, timestamp evidence and warnings, uncertain relationships, and cautious wording for records found on only one side.
+- Added synthetic report tests for changed notes, possible deletion wording, missing or invalid timestamps, readable relationship labels, and hiding source-local IDs.
+- Documented Simple mode's identity, timestamp precedence, information-preserving union, conflict handling, relationship safety, unresolved-time behavior, and required loss-report details in a synthetic acceptance matrix.
+- Implemented a pure Simple mode merge planner that returns source-attributed logical records, per-record and database-time decisions, explicit omitted field and relationship values, unresolved alternatives, and a review-required status without file or database side effects.
+- Expanded the synthetic Simple mode acceptance tests with timezone-instant ordering, equal-time and manifest fallbacks, candidate tag and tag-map conflicts, duplicate identities, linked mark/range retention, malformed relationship retention, information-loss reporting, provenance, and source immutability.
+
 ## 0.1.17 — 2026-10-14
 
 - Aligned the shared toggle's close state with the drawer navigation's right edge and kept it clear of the first navigation item.
