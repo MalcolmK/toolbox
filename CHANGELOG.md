@@ -36,6 +36,10 @@
 - Expanded archive failure-case tests for empty or unchecked SQLite output and malformed or inconsistent manifest JSON; documented existing ZIP, schema, duplicate-identity, conflict, media, hash-gate, and browser download-block coverage. Kept version 0.2.0.
 - Completed the Playwright workflow coverage for navigating back to change a conflict choice; verified all six browser flows in Chromium and Microsoft Edge. Documented that the current hash gate prevents successful download testing and that WebKit/Safari coverage remains unavailable. Kept version 0.2.0.
 - Assessed the JW Library restore-acceptance gate: it remains blocked by the unverified manifest hash and unavailable test app/device. Documented a synthetic-only acceptance sequence and made clear that restore compatibility and retained content are not yet verified. Kept version 0.2.0.
+- Corrected technical documentation to reflect that archive packaging is implemented but production `.jwlibrary` download remains blocked by the unverified manifest hash rule; marked the original design brief as historical. Kept version 0.2.0.
+- Updated the README to describe the guarded ZIP writer, its `.jwlibrary` output extension, and the distinction between file packaging and verified JW Library restore acceptance. Kept version 0.2.0.
+- Expanded README's pending work instructions with read-only analysis of the supplied JW Library backups, controlled manifest-hash verification, synthetic restore acceptance, and memory/ZIP-expansion safeguards. The real backups remain local and are not included in the repository; kept version 0.2.0.
+- Refined the manifest-hash evidence: verified the referenced database path and tested standard SHA-256 plus unpadded per-byte hexadecimal against both supplied backups. Documented that this rejects only those direct raw-byte hypotheses and leaves normalized-content or pre-export inputs unresolved; kept version 0.2.0.
 
 ## 0.1.17 — 2026-10-14
 

@@ -26,6 +26,6 @@ Independent changes are proposed together; overlapping changes require a
 source, both-fragments, or manual-text decision. The review shows excluded text
 and keeps these choices editable for the active comparison session. The review
 does not yet pass its decisions to the SQLite database builder. Simple mode can
-build checked database bytes when all choices are resolved, but no `.jwlibrary`
-archive is built or downloaded until manifest/hash validation and archive
-packaging are complete.
+build checked database bytes, and guarded archive packaging is implemented.
+However, manifest generation fails closed while the hash rule is unverified,
+so a production `.jwlibrary` archive cannot currently be downloaded.

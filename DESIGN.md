@@ -78,8 +78,8 @@ The visual reference is a wide desktop composition. Treat it as a proportion and
 - Preferred stack: TypeScript, React, and Vite; deployment target: static GitHub Pages.
 - Keep the accent, theme, spacing, typography, border, and motion values in shared design tokens.
 - Keep visual components suitable for later independent tools; do not couple each tool's future logic to the home-screen layout.
-- Process files on-device in a future functional phase. Do not upload user files or add a backend, accounts, or a database.
-- The current design phase may provide clickable navigation and simulated interface states, but it does not implement JSON/ZIP reading, validation, merging, or downloads.
+- Process selected files on-device. Do not upload user files or add a backend, accounts, or a database.
+- This brief describes the original visual prototype phase. File reading, validation, merging, and download behavior are now documented in the README and the JW Library Merger technical documents.
 
 ## Open design decisions
 

@@ -22,8 +22,13 @@ Observed manifest fields include `type`, `name`, `creationDate`,
 `userDataBackup.schemaVersion`, `lastModifiedDate`, `deviceName`,
 `databaseName`, `hash`, and `version`. The meaning and validation rule for
 `hash` are not established. In the inspected pair, its value is the same even
-though the database bytes differ. Do not recompute, copy, or claim to validate
-this field until its format has been established against JW Library behavior.
+though the bytes at the manifest-referenced database path differ. Standard
+SHA-256 and SHA-256 formatted as unpadded per-byte hexadecimal do not match
+that value for either file. This weighs against a direct digest of the exported
+database bytes with those encodings, but does not rule out hashing normalized
+SQLite content, a pre-export representation, or another input. Do not
+recompute, copy, or claim to validate this field until its format has been
+established against JW Library behavior.
 
 ## 2. Tables and meaning
 
@@ -266,11 +271,15 @@ deliberately rejected.
 
 `archive/buildManifest.ts` is the manifest-output gate. It currently returns a
 structured `blocked` result and no manifest object or JSON. The block is
-intentional: the exact rule for `manifest.userDataBackup.hash` is not verified,
-and the original investigation observed that this value stayed the same in the
-two inspected archives even though their database contents differed. Neither
-copying a source value nor choosing a standard digest is safe without knowing
-what JW Library computes and when.
+intentional: the exact rule for `manifest.userDataBackup.hash` is not verified.
+In the two inspected archives, this value stayed the same while the
+manifest-referenced database bytes differed. Standard SHA-256 and its
+unpadded-per-byte-hex encoding did not match either value. This is evidence
+against those direct raw-database digest hypotheses, not proof that the field
+is unrelated to database content: it could depend on normalized SQLite data,
+a pre-export representation, or another input. Neither copying a source value
+nor choosing a standard digest is safe without establishing what JW Library
+computes and when.
 
 The public third-party reports located during this step conflict. The
 [`braid` project](https://github.com/drg2121/braid) says the field is not a hash
@@ -283,11 +292,11 @@ rule remains unresolved until verified against authoritative implementation
 evidence or reproducible exports/restores on supported JW Library versions.
 
 Tests require the gate to return no JSON even when source hashes are present,
-equal, different, or the output database is empty. Later archive packaging
-must call this gate and must stop when its status is `blocked`; it must not
-write a guessed hash or fall back to copying a source hash. This makes the
-current limitation explicit, but it does not yet prove a generated manifest
-is consistent or permit a downloadable merged archive.
+equal, different, or the output database is empty. The archive writer calls
+this gate and stops when its status is `blocked`; it must not write a guessed
+hash or fall back to copying a source hash. The gate does not prove that a
+generated manifest is consistent, so production archive download remains
+blocked until the hash rule is verified.
 
 ## 11. Archive writer (implementation step 24)
 
