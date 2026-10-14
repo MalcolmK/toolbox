@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.16 — 2026-10-14
+
+- Aligned the drawer close control with the drawer's upper-right edge.
+
 ## 0.1.15 — 2026-10-14
 
 - Updated the implementation plan to use the confirmed `/toolbox/` Pages path and clarified that GitHub Actions publishes a fresh build from `dist/`.

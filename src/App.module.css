@@ -44,6 +44,10 @@
   color: var(--color-text-secondary);
 }
 
+.closeButton {
+  align-self: flex-end;
+}
+
 .closeButton svg,
 .menuButton svg {
   width: 1.75rem;
