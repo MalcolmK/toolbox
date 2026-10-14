@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.17 — 2026-10-14
+
+- Aligned the shared toggle's close state with the drawer navigation's right edge and kept it clear of the first navigation item.
+
 ## 0.1.16 — 2026-10-14
 
 - Moved the shared navigation toggle to the upper-left corner and into the open drawer, removing the separate drawer close button; animated its icon into a close symbol while respecting reduced-motion preferences.

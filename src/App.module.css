@@ -114,7 +114,7 @@
 
 .menuButtonOpen {
   top: 1.25rem;
-  left: calc(clamp(17rem, 21.7vw, 22rem) - 4.25rem);
+  left: calc(clamp(17rem, 21.7vw, 22rem) - 4.3125rem);
 }
 
 .toolNavigation {
@@ -131,6 +131,10 @@
   font-size: var(--font-size-body);
   font-weight: 600;
   text-decoration: none;
+}
+
+.drawer nav > :first-child {
+  margin-top: 4rem;
 }
 
 .toolboxNavigation {
@@ -891,7 +895,7 @@
   }
 
   .menuButtonOpen {
-    left: calc(min(86vw, 22rem) - 4.25rem);
+    left: calc(min(86vw, 22rem) - 4.3125rem);
   }
 }
 
@@ -944,7 +948,7 @@
   }
 
   .menuButtonOpen {
-    left: calc(min(88vw, 22rem) - 4.25rem);
+    left: calc(min(88vw, 22rem) - 4.3125rem);
   }
 
   .placeholderDialog {
