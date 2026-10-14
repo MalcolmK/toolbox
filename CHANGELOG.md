@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.13 — 2026-10-14
+
+- Corrected the GitHub Pages base path to match the `toolbox` repository.
+
 ## 0.1.12 — 2026-10-13
 
 - Prevented the open navigation drawer from overlapping main content near the desktop breakpoint.

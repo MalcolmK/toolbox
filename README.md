@@ -41,7 +41,7 @@ The project has no backend. Its production output is static.
 
 ## GitHub Pages
 
-Vite currently uses `/LibraryMerger/` as its base path in `vite.config.ts`. Before publishing, confirm that this matches the repository name used for the GitHub Pages project site. Create the production build with `npm run build`; the output is written to `dist/`.
+Vite uses `/toolbox/` as its base path in `vite.config.ts`, matching the repository name for the GitHub Pages project site. Create the production build with `npm run build`; the output is written to `dist/`.
 
 ## Project structure
 
