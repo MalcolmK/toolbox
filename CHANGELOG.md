@@ -1,32 +1,11 @@
 # Changelog
 
-## 0.1.22 — 2026-10-14
-
-- Changed Preview Merge to a semantic route link for native keyboard and browser navigation behavior.
-
-## 0.1.21 — 2026-10-14
-
-- Moved the subpage return link to the upper-left area below the navigation toggle.
-
-## 0.1.20 — 2026-10-14
-
-- Removed the title bar from merger subpages and adjusted their top spacing.
-
-## 0.1.19 — 2026-10-14
-
-- Replaced the Toolbox title bar with a live app search, clear control, and accessible empty-results message.
-
-## 0.1.18 — 2026-10-14
-
-- Focused the active page heading after route changes, including the visible workflow headings on subpages.
-
-## 0.1.17 — 2026-10-14
-
-- Animated the navigation icon between hamburger and close states, respecting reduced-motion preferences.
-
 ## 0.1.16 — 2026-10-14
 
-- Moved the shared navigation toggle to the upper-left corner and into the open drawer, removing the separate drawer close button.
+- Moved the shared navigation toggle to the upper-left corner and into the open drawer, removing the separate drawer close button; animated its icon into a close symbol while respecting reduced-motion preferences.
+- Focused the active page heading after route changes and replaced the Toolbox title bar with live app search, a clear control, and an accessible empty-results message.
+- Removed the title bar from merger subpages and moved the return link to the upper-left area below the navigation toggle.
+- Changed Preview Merge to a semantic route link for native keyboard and browser navigation behavior.
 
 ## 0.1.15 — 2026-10-14
 
