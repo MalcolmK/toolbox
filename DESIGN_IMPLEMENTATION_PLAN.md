@@ -710,7 +710,7 @@ This step remains relevant, but the core click-through prototype already exists.
 | Light / Dark controls | Change and remember theme | Buttons with mutually exclusive `aria-pressed` |
 | JW Library Merger tool card | Navigate to merger sample screen | Anchor |
 | New Tool cards | Open prototype-only notice | Buttons; no creation behavior |
-| Preview Merge | Open illustrative preview route | Button; no data processing |
+| Preview Merge | Open illustrative preview route | Anchor; no data processing |
 | Back to edit / Return to Toolbox | Navigate back through prototype | Anchors |
 | Coming soon dialog Close / Escape | Dismiss the notice | Native dialog and button |
 | Compact-screen scrim | Close the drawer | Decorative dismissal surface, hidden from accessibility tree |
@@ -729,6 +729,17 @@ This step remains relevant, but the core click-through prototype already exists.
 **Checkpoint:** code review finds no dead visible controls or false claims of real processing. The interaction contract is documented; manual browser verification remains outstanding.
 
 **Checkpoint:** there are no visible dead controls and no interaction falsely claims to have processed user data.
+
+#### Execution record — 2026-10-14
+
+- Reassessed Step 9: the interaction audit remains relevant. Its existing nine substeps already cover the needed scope; no additional substeps were necessary.
+- Audited visible controls and route behavior in `src/App.tsx`. Navigation uses hash routes and local state handles drawer, theme, and prototype dialog changes. Sample/prototype status is explicit, and no file processing, upload, or download behavior is present.
+- Found one semantic gap: **Preview Merge** changed the hash from a button click handler even though Step 9 requires anchors for route changes. Changed it to an anchor with `href="#merge-preview"`; the existing shared action styling is preserved.
+- Updated the interaction inventory to identify Preview Merge as a route link. Bumped `package.json` and both root version fields in `package-lock.json` to `0.1.22`, with the matching changelog entry.
+- Source review confirms the drawer uses a named toggle with `aria-expanded`/`aria-controls`; theme controls use `aria-pressed`; routes use anchors; and the placeholder uses a labelled native dialog with button and Escape dismissal. Full automated keyboard/browser journey execution was unavailable in this run because the project has no installed Playwright package or browser-test script; no test dependency was added.
+- TypeScript validation passed with Node.js `v24.19.0` using `tsc --noEmit`; Vite `8.3.4` production build passed. Node `v24.19.0` meets the declared `>=22.12.0` engine range.
+
+**Checkpoint:** route navigation uses semantic links, state changes use buttons, and the merger preview remains illustrative. Build verification is required before considering the implementation complete.
 
 ### Step 10 — Responsive and accessibility review
 
@@ -759,6 +770,18 @@ This step remains relevant and uncovered a real layout defect: just above the 96
 - Updated `package.json`, `package-lock.json`, and `CHANGELOG.md` to version `0.1.12` for the responsive layout fix.
 
 **Checkpoint:** responsive geometry was measured in Edge across the listed routes, themes, and viewport widths; the discovered desktop overlap is fixed, short-height drawer utilities remain reachable, and the production build passes. Screen-reader and physical-device checks remain outside this environment's verification.
+
+#### Follow-up execution record — 2026-10-14
+
+- Reassessed Step 10 after the later header/search, drawer-toggle, and subpage-return-link changes. The step remains relevant; its existing ten substeps are sufficient, so none were added.
+- Rechecked the current `0.1.22` production preview in Microsoft Edge `155.0.4283.45` at 320×320, 320×568, 360×780, 768×1024, 960×900, 961×900, 1024×768, and 1440×900. All three routes were checked in Light and Dark at each size. `document.documentElement.scrollWidth` matched the viewport width throughout; the work surfaces/cards remained within the viewport.
+- At the 960/961 px breakpoint, the compact menu remained a modal overlay with inert main content at 960 px; the 961 px desktop drawer remained a rail and did not overlap the main content. The 1024 px rail also passed the non-overlap check.
+- At compact widths through 960 px, the open menu toggle remained inside the drawer and the main region became inert. At 320×320, drawer controls and version footer fit within the visible drawer without needing internal scrolling.
+- Dispatched real keyboard events in Edge at 390×844: Tab entered the drawer, Shift+Tab returned to its toggle, Tab wrapped from the last drawer control, `:focus-visible` was active, Escape closed the drawer and restored focus, and Enter opened the placeholder dialog before Escape closed it and restored focus to its opener.
+- The browser accessibility tree exposed named buttons; source review confirmed heading/landmark labels, route `aria-current`, toggle `aria-expanded`, theme `aria-pressed`, native dialog naming, and decorative SVG hiding. The reduced-motion check resolved menu-icon transition duration to `0s`. Source review confirmed the `@supports` fallback for surfaces without backdrop filtering; a browser that lacks backdrop-filter support was not available for a rendered fallback check.
+- TypeScript `tsc --noEmit` passed and Vite `8.3.4` production build passed with Node.js `v24.19.0`. No implementation defect was found, so no app code or release version changed in this follow-up. Actual screen-reader and physical-device checks remain unavailable.
+
+**Follow-up checkpoint:** current route/theme combinations passed the measured responsive checks, the compact drawer and keyboard focus behavior passed in Edge, and the current source builds. Screen-reader, physical-device, and unsupported-backdrop-filter rendering checks remain open platform checks.
 
 ### Step 11 — Verify browser and build behavior
 
