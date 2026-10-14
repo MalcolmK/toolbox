@@ -24,9 +24,12 @@ export class JwLibraryReadError extends Error {
 
 export interface JwLibraryManifest {
   readonly [key: string]: unknown;
+  readonly creationDate?: unknown;
   readonly userDataBackup: {
     readonly [key: string]: unknown;
     readonly databaseName: string;
+    readonly schemaVersion?: unknown;
+    readonly lastModifiedDate?: unknown;
   };
 }
 

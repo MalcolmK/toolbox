@@ -18,6 +18,10 @@
 - Documented Simple mode's identity, timestamp precedence, information-preserving union, conflict handling, relationship safety, unresolved-time behavior, and required loss-report details in a synthetic acceptance matrix.
 - Implemented a pure Simple mode merge planner that returns source-attributed logical records, per-record and database-time decisions, explicit omitted field and relationship values, unresolved alternatives, and a review-required status without file or database side effects.
 - Expanded the synthetic Simple mode acceptance tests with timezone-instant ordering, equal-time and manifest fallbacks, candidate tag and tag-map conflicts, duplicate identities, linked mark/range retention, malformed relationship retention, information-loss reporting, provenance, and source immutability.
+- Replaced the sample merger screen with a browser-local two-file workflow that validates each source, runs the comparison and Simple mode planner, presents timestamp/loss/uncertainty details, and gates the next file stage on resolved choices; added Playwright coverage for conflict and ready states at phone, tablet, and desktop widths.
+- Added an empty schema-valid synthetic archive pair for the no-unresolved-choice workflow and documented the added fixtures; kept all changes in version 0.2.0.
+- Added a typed advanced-mode merge-decision model that carries logical identity, source and timestamp provenance, field/block differences, suggested and available actions, and makes confirmed conflicts require a base plus an explicitly overlapping change.
+- Documented the certainty rules and UI-facing contract for merge decisions in `MERGE_DECISIONS.md`.
 
 ## 0.1.17 — 2026-10-14
 

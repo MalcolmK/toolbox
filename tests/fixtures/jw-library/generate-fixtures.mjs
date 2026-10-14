@@ -60,6 +60,7 @@ function createDatabase({
   databaseLastModified = "2026-10-10T10:00:00Z",
   addNote = false,
   addMarkAndRanges = false,
+  emptyRecords = false,
 } = {}) {
   const database = new SQL.Database();
   database.run("PRAGMA foreign_keys = ON;");
@@ -69,74 +70,76 @@ function createDatabase({
   database.run("INSERT INTO LastModified (LastModified) VALUES (?)", [databaseLastModified]);
   // JW Library's schema blocks later inserts/deletes from this singleton table.
   database.run(triggers);
-  database.run(
-    `INSERT INTO Location
-      (LocationId, DocumentId, IssueTagNumber, KeySymbol, MepsLanguage, Type)
-      VALUES (1, 900001, 0, 'SYNTHETIC', 1, 0)`,
-  );
+  if (!emptyRecords) {
+    database.run(
+      `INSERT INTO Location
+        (LocationId, DocumentId, IssueTagNumber, KeySymbol, MepsLanguage, Type)
+        VALUES (1, 900001, 0, 'SYNTHETIC', 1, 0)`,
+    );
 
-  insertNote(database, {
-    noteId: 1,
-    guid: ids.baseNote,
-    title: "Synthetic note",
-    content: noteContent,
-    created: "2026-10-01T09:00:00Z",
-    lastModified: noteLastModified,
-  });
-
-  database.run(
-    `INSERT INTO UserMark
-      (UserMarkId, ColorIndex, LocationId, StyleIndex, UserMarkGuid, Version)
-      VALUES (1, 1, 1, 1, ?, 1)`,
-    [ids.firstMark],
-  );
-  database.run(
-    `INSERT INTO BlockRange
-      (BlockRangeId, BlockType, Identifier, StartToken, EndToken, UserMarkId)
-      VALUES (1, 1, 10, 0, 4, 1)`,
-  );
-
-  database.run("INSERT INTO Tag (TagId, Type, Name) VALUES (1, 1, 'Synthetic tag')");
-  database.run(
-    `INSERT INTO TagMap
-      (TagMapId, PlaylistItemId, LocationId, NoteId, TagId, Position)
-      VALUES (1, NULL, NULL, 1, 1, 0)`,
-  );
-  database.run(
-    `INSERT INTO Bookmark
-      (BookmarkId, LocationId, PublicationLocationId, Slot, Title, Snippet, BlockType, BlockIdentifier)
-      VALUES (1, 1, 1, 0, 'Synthetic bookmark', 'Generated fixture', 0, NULL)`,
-  );
-  database.run(
-    "INSERT INTO InputField (LocationId, TextTag, Value) VALUES (1, 'tt20', 'Synthetic value')",
-  );
-
-  if (addNote) {
     insertNote(database, {
-      noteId: 2,
-      guid: ids.addedNote,
-      title: "Added synthetic note",
-      content: "This note exists only in the added-note fixture.",
-      created: "2026-10-11T08:00:00Z",
-      lastModified: "2026-10-11T08:00:00Z",
+      noteId: 1,
+      guid: ids.baseNote,
+      title: "Synthetic note",
+      content: noteContent,
+      created: "2026-10-01T09:00:00Z",
+      lastModified: noteLastModified,
     });
-  }
 
-  if (addMarkAndRanges) {
     database.run(
       `INSERT INTO UserMark
         (UserMarkId, ColorIndex, LocationId, StyleIndex, UserMarkGuid, Version)
-        VALUES (2, 2, 1, 1, ?, 1)`,
-      [ids.addedMark],
+        VALUES (1, 1, 1, 1, ?, 1)`,
+      [ids.firstMark],
     );
     database.run(
       `INSERT INTO BlockRange
         (BlockRangeId, BlockType, Identifier, StartToken, EndToken, UserMarkId)
-        VALUES (2, 1, 20, 0, 2, 2), (3, 1, 20, 3, 5, 2), (4, 2, 21, 0, 1, 2)`,
+        VALUES (1, 1, 10, 0, 4, 1)`,
+    );
+
+    database.run("INSERT INTO Tag (TagId, Type, Name) VALUES (1, 1, 'Synthetic tag')");
+    database.run(
+      `INSERT INTO TagMap
+        (TagMapId, PlaylistItemId, LocationId, NoteId, TagId, Position)
+        VALUES (1, NULL, NULL, 1, 1, 0)`,
     );
     database.run(
-      "INSERT INTO InputField (LocationId, TextTag, Value) VALUES (1, 'tt21', 'Additional synthetic value')",
+      `INSERT INTO Bookmark
+        (BookmarkId, LocationId, PublicationLocationId, Slot, Title, Snippet, BlockType, BlockIdentifier)
+        VALUES (1, 1, 1, 0, 'Synthetic bookmark', 'Generated fixture', 0, NULL)`,
     );
+    database.run(
+      "INSERT INTO InputField (LocationId, TextTag, Value) VALUES (1, 'tt20', 'Synthetic value')",
+    );
+
+    if (addNote) {
+      insertNote(database, {
+        noteId: 2,
+        guid: ids.addedNote,
+        title: "Added synthetic note",
+        content: "This note exists only in the added-note fixture.",
+        created: "2026-10-11T08:00:00Z",
+        lastModified: "2026-10-11T08:00:00Z",
+      });
+    }
+
+    if (addMarkAndRanges) {
+      database.run(
+        `INSERT INTO UserMark
+          (UserMarkId, ColorIndex, LocationId, StyleIndex, UserMarkGuid, Version)
+          VALUES (2, 2, 1, 1, ?, 1)`,
+        [ids.addedMark],
+      );
+      database.run(
+        `INSERT INTO BlockRange
+          (BlockRangeId, BlockType, Identifier, StartToken, EndToken, UserMarkId)
+          VALUES (2, 1, 20, 0, 2, 2), (3, 1, 20, 3, 5, 2), (4, 2, 21, 0, 1, 2)`,
+      );
+      database.run(
+        "INSERT INTO InputField (LocationId, TextTag, Value) VALUES (1, 'tt21', 'Additional synthetic value')",
+      );
+    }
   }
 
   // Data-change triggers set this to wall-clock time; fixtures reset it to the
@@ -201,6 +204,7 @@ const marksDatabase = createDatabase({
   databaseLastModified: "2026-10-11T13:00:00Z",
   addMarkAndRanges: true,
 });
+const emptyDatabase = createDatabase({ emptyRecords: true });
 
 await writeArchive("identical-a.jwlibrary", { databaseBytes: baseDatabase });
 await writeArchive("identical-b.jwlibrary", { databaseBytes: baseDatabase });
@@ -225,6 +229,8 @@ await writeArchive("mark-and-ranges-added.jwlibrary", {
   databaseBytes: marksDatabase,
   manifest: makeManifest("2026-10-11T13:00:00Z"),
 });
+await writeArchive("empty-a.jwlibrary", { databaseBytes: emptyDatabase });
+await writeArchive("empty-b.jwlibrary", { databaseBytes: emptyDatabase });
 await writeArchive("missing-manifest.jwlibrary", {
   databaseBytes: baseDatabase,
   includeManifest: false,

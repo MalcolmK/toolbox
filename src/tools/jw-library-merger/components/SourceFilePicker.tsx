@@ -3,7 +3,7 @@ import type { MergeInputCheck } from "../merge/prepareSimpleMerge";
 import styles from "./LibraryMergerPage.module.css";
 
 interface SourceFilePickerProps {
-  readonly source: "A" | "B";
+  readonly source: "A" | "B" | "basis";
   readonly file: File | null;
   readonly check: MergeInputCheck | null;
   readonly busy: boolean;
@@ -11,6 +11,7 @@ interface SourceFilePickerProps {
 }
 
 export function SourceFilePicker({ source, file, check, busy, onChoose }: SourceFilePickerProps) {
+  const sourceLabel = source === "basis" ? "basisversie" : `bron ${source}`;
   const inputId = `library-source-${source.toLowerCase()}`;
   const statusId = `${inputId}-status`;
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -36,10 +37,12 @@ export function SourceFilePicker({ source, file, check, busy, onChoose }: Source
   return (
     <div className={styles.sourceCard}>
       <div className={styles.sourceHeading}>
-        <h2>Back-up {source}</h2>
-        <span className={styles.sourceBadge}>Bron {source}</span>
+        <h2>{source === "basis" ? "Basisversie" : `Back-up ${source}`}</h2>
+        <span className={styles.sourceBadge}>{sourceLabel}</span>
       </div>
-      <label className={styles.fileLabel} htmlFor={inputId}>Kies .jwlibrary-bestand {source}</label>
+      <label className={styles.fileLabel} htmlFor={inputId}>
+        Kies .jwlibrary-bestand {source === "basis" ? "als basisversie" : source}
+      </label>
       <input
         id={inputId}
         className={styles.fileInput}

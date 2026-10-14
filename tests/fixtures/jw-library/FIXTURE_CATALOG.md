@@ -22,6 +22,7 @@ the fixtures are not claimed to be importable by JW Library.
 | `modified-note-newer.jwlibrary` | Existing note content changed with a later note and database timestamp. |
 | `conflict-source-a.jwlibrary` + `conflict-source-b.jwlibrary` | Same note independently represented with different contents and timestamps. |
 | `mark-and-ranges-added.jwlibrary` | One additional mark, three related block ranges, and one extra input field. |
+| `empty-a.jwlibrary` + `empty-b.jwlibrary` | Identical schema-valid libraries with no user records; the Simple plan has no unresolved groups and exercises the ready-to-build UI gate. |
 | `missing-manifest.jwlibrary` | ZIP without `manifest.json`. |
 | `invalid-manifest.jwlibrary` | ZIP with malformed manifest JSON. |
 | `missing-database.jwlibrary` | ZIP with manifest but no database entry. |
@@ -35,7 +36,9 @@ The baseline counts apply to `base`, `identical-a`, `identical-b`,
 `modified-note-newer`, and both `conflict-source` fixtures. The changed counts
 below override the baseline for the named fixture. Counts for every table,
 including empty playlist/media tables and `grdb_migrations`, are asserted by
-`tests/unit/jw-library-merger/readUserData.test.ts`.
+`tests/unit/jw-library-merger/readUserData.test.ts`. Both `empty-a` and
+`empty-b` contain one `LastModified` row and one migration row; every other
+user-data table is empty.
 
 | Table | Baseline | `new-note` | `mark-and-ranges-added` |
 | --- | ---: | ---: | ---: |

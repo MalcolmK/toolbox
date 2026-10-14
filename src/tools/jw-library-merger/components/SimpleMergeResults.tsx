@@ -1,6 +1,6 @@
 import type { SqlValue } from "sql.js";
-import type { MergeReport } from "../report/buildMergeReport";
 import type { SimpleMergePreview } from "../merge/prepareSimpleMerge";
+import type { MergeRowCandidate, SimpleMergeReport } from "../merge/simpleMerge";
 import styles from "./LibraryMergerPage.module.css";
 
 const tableLabels: Readonly<Record<string, string>> = {
@@ -46,16 +46,16 @@ function ValueDisclosure({ label, value }: { readonly label: string; readonly va
   );
 }
 
-function noteTitle(source: MergeReport["unresolved"][number]["sourceA"]): string | null {
+function noteTitle(source: MergeRowCandidate | null): string | null {
   const title = source?.row.Title;
   return typeof title === "string" && title.trim() ? title : null;
 }
 
 export function SimpleMergeResults({ preview }: { readonly preview: SimpleMergePreview }) {
-  const { comparison, differenceReport, mergePlan } = preview;
+  const { differenceReport, mergePlan } = preview;
   const counts = differenceReport.summary;
   const losses = mergePlan.report.informationLoss;
-  const unresolved = mergePlan.report.unresolved;
+  const unresolved: SimpleMergeReport["unresolved"] = mergePlan.report.unresolved;
   const selectedA = mergePlan.report.choices.filter((choice) => choice.selectedSource === "A").length;
   const selectedB = mergePlan.report.choices.filter((choice) => choice.selectedSource === "B").length;
 
@@ -73,12 +73,33 @@ export function SimpleMergeResults({ preview }: { readonly preview: SimpleMergeP
 
       <div className={styles.sourceSummary} aria-label="Gevalideerde bronnen">
         {preview.sources.map((source, index) => (
-          <p key={source.fileName}>
+          <p key={`${index}-${source.fileName}`}>
             <strong>Back-up {index === 0 ? "A" : "B"}:</strong> {source.fileName}
             <span> · schema {source.schemaVersion}</span>
           </p>
         ))}
       </div>
+
+      <section aria-labelledby="timestamps-heading">
+        <h3 id="timestamps-heading">Tijdstempels uit de back-ups</h3>
+        <ul className={styles.detailList}>
+          {differenceReport.sources.flatMap((source) => source.timestamps.map((timestamp) => (
+            <li key={`${source.label}-${timestamp.label}-${timestamp.recordLabel ?? "source"}`}>
+              <strong>{source.label} · {timestamp.label}</strong>
+              <p>{timestamp.originalValue ?? "Tijdstempel ontbreekt"} · {timestamp.status}</p>
+              {timestamp.utcValue && <p>Genormaliseerd: {timestamp.utcValue}</p>}
+              <p>{timestamp.message}</p>
+            </li>
+          )))}
+        </ul>
+        {differenceReport.timestampWarnings.length > 0 && (
+          <ul className={styles.warningList} aria-label="Tijdstempelwaarschuwingen">
+            {differenceReport.timestampWarnings.map((warning, index) => (
+              <li key={`${warning.source}-${warning.label}-${warning.recordLabel ?? index}`}>{warning.message}</li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section aria-labelledby="difference-summary-heading">
         <h3 id="difference-summary-heading">Verschillen</h3>
@@ -155,6 +176,12 @@ export function SimpleMergeResults({ preview }: { readonly preview: SimpleMergeP
                 {record.changes.map((change) => (
                   <p key={`${change.field}-${change.label}`}>
                     {change.label}: A «{change.valueA}» · B «{change.valueB}»
+                  </p>
+                ))}
+                {record.noteTimestamps.map((timestamps) => (
+                  <p key={timestamps.field}>
+                    {timestamps.field}: A «{timestamps.valueA?.originalValue ?? "onbekend"}» ·
+                    {` B «${timestamps.valueB?.originalValue ?? "onbekend"}»`}
                   </p>
                 ))}
                 {record.uncertaintyNotes.map((note) => <p key={note}>{note}</p>)}
