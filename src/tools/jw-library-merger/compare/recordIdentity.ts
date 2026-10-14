@@ -119,6 +119,14 @@ export const TABLE_IDENTITY_RULES: Readonly<Record<string, TableIdentityRule>> =
   },
 };
 
+interface SnapshotIdentityIndexes {
+  readonly localRows: Map<string, Map<SqlValue, UserDataRow>>;
+  readonly locationCounts: Map<string, number>;
+  readonly blockRangeCounts: Map<string, number>;
+}
+
+const snapshotIdentityIndexes = new WeakMap<UserDataSnapshot, SnapshotIdentityIndexes>();
+
 const localPrimaryKeyColumns: Readonly<Record<string, readonly string[]>> = {
   BlockRange: ["BlockRangeId"],
   Bookmark: ["BookmarkId"],
@@ -177,7 +185,7 @@ function findByLocalId(
   id: SqlValue | undefined,
 ): UserDataRow | undefined {
   if (id === null || id === undefined) return undefined;
-  return snapshot.tables[tableName]?.rows.find((candidate) => candidate[idColumn] === id);
+  return getSnapshotIdentityIndexes(snapshot).localRows.get(`${tableName}\u0000${idColumn}`)?.get(id);
 }
 
 function locationCandidate(row: UserDataRow | undefined): string | null {
@@ -189,6 +197,47 @@ function locationCandidate(row: UserDataRow | undefined): string | null {
     row.MepsLanguage ?? null,
     row.Type ?? null,
   ]);
+}
+
+function getSnapshotIdentityIndexes(snapshot: UserDataSnapshot): SnapshotIdentityIndexes {
+  const cached = snapshotIdentityIndexes.get(snapshot);
+  if (cached) return cached;
+
+  const localRows = new Map<string, Map<SqlValue, UserDataRow>>();
+  const indexLocalRows = (tableName: string, columnName: string) => {
+    const rows = new Map<SqlValue, UserDataRow>();
+    for (const row of snapshot.tables[tableName]?.rows ?? []) {
+      const value = row[columnName];
+      if (value !== null && value !== undefined && !rows.has(value)) rows.set(value, row);
+    }
+    localRows.set(`${tableName}\u0000${columnName}`, rows);
+  };
+  indexLocalRows("Location", "LocationId");
+  indexLocalRows("UserMark", "UserMarkId");
+  indexLocalRows("Tag", "TagId");
+  indexLocalRows("Note", "NoteId");
+
+  const locationCounts = new Map<string, number>();
+  for (const row of snapshot.tables.Location?.rows ?? []) {
+    const key = locationCandidate(row);
+    if (key !== null) locationCounts.set(key, (locationCounts.get(key) ?? 0) + 1);
+  }
+
+  const blockRangeCounts = new Map<string, number>();
+  const marksById = localRows.get("UserMark\u0000UserMarkId")!;
+  for (const row of snapshot.tables.BlockRange?.rows ?? []) {
+    const mark = row.UserMarkId === null || row.UserMarkId === undefined ? undefined : marksById.get(row.UserMarkId);
+    const markGuid = typeof mark?.UserMarkGuid === "string" ? mark.UserMarkGuid : null;
+    if (markGuid === null) continue;
+    const key = tupleKey("BlockRange", TABLE_IDENTITY_RULES.BlockRange!.strategy, [
+      markGuid, row.BlockType, row.Identifier, row.StartToken, row.EndToken,
+    ], true);
+    if (key !== null) blockRangeCounts.set(key, (blockRangeCounts.get(key) ?? 0) + 1);
+  }
+
+  const indexes = { localRows, locationCounts, blockRangeCounts };
+  snapshotIdentityIndexes.set(snapshot, indexes);
+  return indexes;
 }
 
 function tagCandidate(snapshot: UserDataSnapshot, tagId: SqlValue | undefined): string | null {
@@ -268,8 +317,7 @@ export function identifyRecord(
         rule.rationale);
     case "Location": {
       const key = locationCandidate(row);
-      const duplicates = key === null ? 0 : (snapshot.tables.Location?.rows ?? [])
-        .filter((candidate) => locationCandidate(candidate) === key).length;
+      const duplicates = key === null ? 0 : getSnapshotIdentityIndexes(snapshot).locationCounts.get(key) ?? 0;
       return identity(snapshot, tableName, row,
         duplicates === 1 ? rule.status : "uncertain", rule.strategy, key,
         duplicates === 1 ? rule.rationale : "De natuurlijke locatiesleutel is onvolledig of dubbel.");
@@ -323,13 +371,7 @@ export function identifyRecord(
       const key = markGuid === null
         ? null
         : tupleKey(tableName, rule.strategy, [markGuid, ...fields], true);
-      const duplicates = key === null ? 0 : (snapshot.tables.BlockRange?.rows ?? [])
-        .filter((candidate) => {
-          const parent = findByLocalId(snapshot, "UserMark", "UserMarkId", candidate.UserMarkId);
-          return typeof parent?.UserMarkGuid === "string"
-            && tupleKey(tableName, rule.strategy, [parent.UserMarkGuid, candidate.BlockType,
-              candidate.Identifier, candidate.StartToken, candidate.EndToken], true) === key;
-        }).length;
+      const duplicates = key === null ? 0 : getSnapshotIdentityIndexes(snapshot).blockRangeCounts.get(key) ?? 0;
       return identity(snapshot, tableName, row,
         duplicates === 1 ? rule.status : "uncertain", rule.strategy, key,
         duplicates === 1 ? rule.rationale : "Het bereik is dubbel of de bovenliggende markering heeft geen stabiele identiteit.");

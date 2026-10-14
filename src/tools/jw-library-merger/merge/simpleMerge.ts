@@ -21,7 +21,7 @@ export interface SimpleMergeRecord {
   readonly identityKey: string | null;
   readonly identityStatus: ComparedRecord["identityStatus"];
   readonly comparisonStatus: ComparisonStatus;
-  readonly action: "keep-one" | "keep-both-pending-review" | "needs-review";
+  readonly action: "keep-one" | "omit" | "keep-both-pending-review" | "needs-review";
   readonly selected: MergeRowCandidate | null;
   readonly retainedAlternatives: readonly MergeRowCandidate[];
   readonly confidence: MergeConfidence;
@@ -44,7 +44,7 @@ export interface SimpleMergeInformationLoss {
   readonly valueNotRetained: SqlValue | undefined;
   readonly omittedFrom: MergeSource;
   readonly retainedValue: SqlValue | undefined;
-  readonly retainedFrom: MergeSource;
+  readonly retainedFrom: MergeSource | null;
   readonly reason: string;
   readonly relationshipTargetTable?: string;
   readonly relationshipIdentityNotRetained?: string | null;

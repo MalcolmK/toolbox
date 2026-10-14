@@ -1,14 +1,10 @@
-import { canKeepBothTextFragments, mergeNoteText, type TextGranularity, type TextMergeSegment } from "../compare/mergeNoteText";
+import { canKeepBothTextFragments, mergeNoteText, type TextMergeSegment } from "../compare/mergeNoteText";
 import type { ThreeWayRecordDecision } from "../compare/compareThreeWay";
 import type { MergeDecisionValue } from "../types";
+import { emptyNoteTextReviewState, type NoteTextReviewState, type NoteTextResolution } from "../merge/advancedMerge";
 import styles from "./LibraryMergerPage.module.css";
 
-export type NoteTextResolution = { readonly choice: "a" | "b" | "both" | "manual"; readonly manualText?: string };
-export interface NoteTextReviewState {
-  readonly granularity: TextGranularity;
-  readonly resolutions: Readonly<Record<string, NoteTextResolution>>;
-}
-export const emptyNoteTextReviewState: NoteTextReviewState = { granularity: "block", resolutions: {} };
+export { emptyNoteTextReviewState, type NoteTextReviewState, type NoteTextResolution };
 
 function textValue(value: MergeDecisionValue | null): string | null {
   if (!value || value.presence === "missing" || typeof value.value !== "string") return null;

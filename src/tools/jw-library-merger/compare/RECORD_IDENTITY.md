@@ -45,3 +45,9 @@ comparison; `uncertain` rows must not be paired automatically.
 
 `compare/recordIdentity.ts` implements these rules. A table-coverage test fails
 if a supported schema table has no explicit policy.
+
+Per-snapshot lookup indexes are used for source-local foreign-key targets,
+location candidate counts, and mark-range candidate counts. They avoid
+re-scanning large target tables for every relationship. The indexes only
+change lookup cost; they do not promote a candidate identity to a stable one
+or alter merge decisions.

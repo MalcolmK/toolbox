@@ -1,6 +1,8 @@
-import { useRef, useState, type Ref } from "react";
-import { buildSimpleJwLibrary } from "../archive/buildSimpleJwLibrary";
+import { useCallback, useRef, useState, type Ref } from "react";
+import { buildAdvancedPocJwLibrary } from "../archive/buildAdvancedPocJwLibrary";
+import { buildSimplePocJwLibrary } from "../archive/buildSimplePocJwLibrary";
 import type { JwLibraryWriteResult } from "../archive/writeJwLibrary";
+import type { SimpleMergeResult } from "../merge/simpleMerge";
 import {
   AdvancedMergeInputError,
   prepareAdvancedMerge,
@@ -24,9 +26,9 @@ interface LibraryMergerPageProps {
 type FilePair = [File | null, File | null];
 type CheckPair = [MergeInputCheck | null, MergeInputCheck | null];
 
-function createDownloadSummary(preview: SimpleMergePreview): ArchiveDownloadSummary {
+function createDownloadSummary(plan: SimpleMergeResult): ArchiveDownloadSummary {
   const recordsByTable: Record<string, number> = {};
-  for (const record of preview.mergePlan.records) recordsByTable[record.tableName] = (recordsByTable[record.tableName] ?? 0) + 1;
+  for (const record of plan.records) recordsByTable[record.tableName] = (recordsByTable[record.tableName] ?? 0) + 1;
   const formatOmittedValue = (value: unknown): string => {
     if (value === undefined) return "ontbrekende waarde";
     if (value === null) return "lege waarde";
@@ -34,15 +36,15 @@ function createDownloadSummary(preview: SimpleMergePreview): ArchiveDownloadSumm
     return String(value);
   };
   return {
-    recordCount: preview.mergePlan.records.length,
+    recordCount: plan.records.length,
     recordsByTable,
-    choices: preview.mergePlan.report.choices.map((choice) =>
+    choices: plan.report.choices.map((choice) =>
       `${choice.tableName}: ${choice.selectedSource ? `bron ${choice.selectedSource}` : "geen bron geselecteerd"}; ${choice.reason}`),
     uncertainties: [
-      ...preview.mergePlan.report.warnings,
-      ...preview.mergePlan.report.unresolved.map((record) => `${record.tableName}: ${record.reason}`),
+      ...plan.report.warnings,
+      ...plan.report.unresolved.map((record) => `${record.tableName}: ${record.reason}`),
     ],
-    omissions: preview.mergePlan.report.informationLoss.map((loss) =>
+    omissions: plan.report.informationLoss.map((loss) =>
       `${loss.tableName}.${loss.field}: waarde uit bron ${loss.omittedFrom} niet meegenomen: ${formatOmittedValue(loss.valueNotRetained)} (${loss.reason})`),
   };
 }
@@ -54,6 +56,7 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
   const [baseCheck, setBaseCheck] = useState<MergeInputCheck | null>(null);
   const [simplePreview, setSimplePreview] = useState<SimpleMergePreview | null>(null);
   const [advancedPreview, setAdvancedPreview] = useState<AdvancedMergePreview | null>(null);
+  const [advancedMergePlan, setAdvancedMergePlan] = useState<SimpleMergeResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [buildStageOpen, setBuildStageOpen] = useState(false);
@@ -64,11 +67,24 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
   const [mode, setMode] = useState<"simple" | "advanced">("simple");
   const canCompare = files[0] !== null && files[1] !== null && !busy;
   const activePreview = mode === "simple" ? simplePreview : null;
+  const activePlan = mode === "simple" ? simplePreview?.mergePlan ?? null : advancedMergePlan;
+
+  const handleAdvancedPlanChange = useCallback((plan: SimpleMergeResult) => {
+    setAdvancedMergePlan(plan);
+    if (plan.status !== "ready") {
+      buildGeneration.current += 1;
+      setBuildStageOpen(false);
+      setBuildingArchive(false);
+      setArchiveWriteResult(null);
+      setArchiveBuildError(null);
+    }
+  }, []);
 
   const clearResults = () => {
     buildGeneration.current += 1;
     setSimplePreview(null);
     setAdvancedPreview(null);
+    setAdvancedMergePlan(null);
     setError(null);
     setBuildStageOpen(false);
     setBuildingArchive(false);
@@ -105,6 +121,7 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
     setError(null);
     setSimplePreview(null);
     setAdvancedPreview(null);
+    setAdvancedMergePlan(null);
     setBuildStageOpen(false);
     setBuildingArchive(false);
     setArchiveWriteResult(null);
@@ -155,14 +172,19 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
   };
 
   const buildArchive = async () => {
-    if (!activePreview || activePreview.mergePlan.status !== "ready") return;
+    if (!activePlan || activePlan.status !== "ready") return;
     const generation = ++buildGeneration.current;
     setBuildStageOpen(true);
     setBuildingArchive(true);
     setArchiveWriteResult(null);
     setArchiveBuildError(null);
     try {
-      const result = await buildSimpleJwLibrary(activePreview);
+      const result = mode === "simple" && simplePreview
+        ? await buildSimplePocJwLibrary(simplePreview)
+        : mode === "advanced" && advancedPreview
+          ? await buildAdvancedPocJwLibrary(advancedPreview, activePlan)
+          : null;
+      if (!result) return;
       if (generation === buildGeneration.current) setArchiveWriteResult(result);
     } catch (cause) {
       if (generation === buildGeneration.current) {
@@ -237,38 +259,38 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
       {activePreview && (
         <>
           <SimpleMergeResults preview={activePreview} />
-          {activePreview.mergePlan.status === "ready" && !buildStageOpen && (
-            <div className={styles.actions}>
-              <button className={styles.actionButton} type="button" onClick={() => setBuildStageOpen(true)}>
-                Naar bestand maken
-              </button>
-            </div>
-          )}
           {activePreview.mergePlan.status === "needs-review" && (
             <p className={styles.notReadyNotice} role="status">
               De bestandsstap is geblokkeerd zolang er onopgeloste identiteiten, koppelingen of keuzes zijn.
               Los die later op in de geavanceerde modus.
             </p>
           )}
-          {buildStageOpen && (
-            <section className={styles.buildStage} aria-labelledby="build-stage-heading">
-              <h2 id="build-stage-heading">Back-up opbouwen en controleren</h2>
-              {buildingArchive && <p role="status">De database wordt opnieuw gevalideerd en lokaal opgebouwd…</p>}
-              {archiveBuildError && <p className={styles.downloadError} role="alert">{archiveBuildError}</p>}
-              {archiveWriteResult && <ArchiveDownload result={archiveWriteResult} summary={createDownloadSummary(activePreview)} />}
-              {!buildingArchive && !archiveBuildError && !archiveWriteResult && (
-                <button className={styles.actionButton} type="button" onClick={() => void buildArchive()}>
-                  Bestand maken en controleren
-                </button>
-              )}
-              <button className={styles.clearFileButton} type="button" onClick={closeBuildStage}>
-                Terug naar het mergeplan en uitvoer wissen
-              </button>
-            </section>
-          )}
         </>
       )}
-      {mode === "advanced" && advancedPreview && <AdvancedMergeResults comparison={advancedPreview.comparison} />}
+      {mode === "advanced" && advancedPreview && <AdvancedMergeResults preview={advancedPreview} onPlanChange={handleAdvancedPlanChange} />}
+      {activePlan?.status === "ready" && !buildStageOpen && (
+        <div className={styles.actions}>
+          <button className={styles.actionButton} type="button" onClick={() => setBuildStageOpen(true)}>
+            Naar bestand maken
+          </button>
+        </div>
+      )}
+      {buildStageOpen && activePlan?.status === "ready" && (
+        <section className={styles.buildStage} aria-labelledby="build-stage-heading">
+          <h2 id="build-stage-heading">Back-up opbouwen en controleren</h2>
+          {buildingArchive && <p role="status">De database wordt opnieuw gevalideerd en lokaal opgebouwd…</p>}
+          {archiveBuildError && <p className={styles.downloadError} role="alert">{archiveBuildError}</p>}
+          {archiveWriteResult && <ArchiveDownload result={archiveWriteResult} summary={createDownloadSummary(activePlan)} />}
+          {!buildingArchive && !archiveBuildError && !archiveWriteResult && (
+            <button className={styles.actionButton} type="button" onClick={() => void buildArchive()}>
+              Bestand maken en controleren
+            </button>
+          )}
+          <button className={styles.clearFileButton} type="button" onClick={closeBuildStage}>
+            Terug naar het mergeplan en uitvoer wissen
+          </button>
+        </section>
+      )}
     </section>
   );
 }

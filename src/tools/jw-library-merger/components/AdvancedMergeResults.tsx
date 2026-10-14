@@ -1,8 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ThreeWayOutcome, ThreeWayRecordDecision } from "../compare/compareThreeWay";
 import { mergeNoteText } from "../compare/mergeNoteText";
 import type { MergeDecisionAction, MergeDecisionTimestamp, MergeDecisionValue } from "../types";
-import { emptyNoteTextReviewState, NoteTextReview, type NoteTextReviewState } from "./NoteTextReview";
+import { advancedDecisionKey, buildAdvancedMergePlan, emptyNoteTextReviewState, type AdvancedMergeReviewState, type NoteTextReviewState } from "../merge/advancedMerge";
+import type { AdvancedMergePreview } from "../merge/prepareSimpleMerge";
+import type { SimpleMergeResult } from "../merge/simpleMerge";
+import { NoteTextReview } from "./NoteTextReview";
 import styles from "./LibraryMergerPage.module.css";
 
 const outcomeLabels: Readonly<Record<ThreeWayOutcome, string>> = {
@@ -44,7 +47,7 @@ function displayTime(timestamp: MergeDecisionTimestamp): string {
 }
 
 function recordKey(record: ThreeWayRecordDecision, index: number): string {
-  return `${record.tableName}:${record.logicalIdentity.key ?? "onbekend"}:${index}`;
+  return advancedDecisionKey(record.tableName, record.logicalIdentity.key, index);
 }
 
 interface ReviewDecisionUnit {
@@ -182,10 +185,17 @@ function collectLossEntries(
   return losses;
 }
 
-export function AdvancedMergeResults({ comparison }: { readonly comparison: AdvancedMergeRecordComparison }) {
+export function AdvancedMergeResults({ preview, onPlanChange }: {
+  readonly preview: AdvancedMergePreview;
+  readonly onPlanChange?: (plan: SimpleMergeResult) => void;
+}) {
+  const { comparison } = preview;
   const [choices, setChoices] = useState<Readonly<Record<string, MergeDecisionAction>>>({});
   const [noteTextStates, setNoteTextStates] = useState<Readonly<Record<string, NoteTextReviewState>>>({});
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
+  const reviewState: AdvancedMergeReviewState = { choices, noteTextStates, reviewConfirmed };
+  const mergePlan = useMemo(() => buildAdvancedMergePlan(preview, reviewState), [preview, choices, noteTextStates, reviewConfirmed]);
+  useEffect(() => { onPlanChange?.(mergePlan); }, [mergePlan, onPlanChange]);
   const changedRecords = comparison.records.filter((record) => record.outcome !== "unchanged");
   const reviewItems = useMemo(() => comparison.records
       .map((record, index) => ({ record, key: recordKey(record, index) }))
@@ -254,7 +264,9 @@ export function AdvancedMergeResults({ comparison }: { readonly comparison: Adva
         <button className={styles.actionButton} type="button" disabled={pendingUnits.length > 0} onClick={() => setReviewConfirmed(true)}>
           {pendingUnits.length > 0 ? "Resterende keuzes beoordelen" : "Besluiten afronden"}
         </button>
-        {reviewConfirmed && <p className={styles.choiceStatus} role="status">Alle vereiste beslissingen zijn ingevuld. De keuzes blijven aanpasbaar; het mergebestand wordt in een latere stap gemaakt.</p>}
+        {reviewConfirmed && <p className={styles.choiceStatus} role="status">Alle vereiste beslissingen zijn ingevuld. De keuzes blijven aanpasbaar zolang deze vergelijking openstaat.</p>}
+        {reviewConfirmed && mergePlan.status === "ready" && <p className={styles.choiceStatus} role="status">De keuzes zijn veilig vertaald naar een databaseplan. De bronbestanden en vergelijkingsbasis zijn niet gewijzigd; de uitvoerstap volgt hierna.</p>}
+        {reviewConfirmed && mergePlan.status === "needs-review" && <div className={styles.notReadyNotice} role="status"><strong>Geen uitvoerbaar databaseplan</strong><ul>{mergePlan.report.unresolved.map((item, index) => <li key={`${item.tableName}-${item.identityKey ?? index}`}>{item.tableName}: {item.reason}</li>)}</ul></div>}
       </section>
 
       <section className={styles.lossOverview} aria-labelledby="loss-overview-heading">
@@ -350,10 +362,4 @@ function SourcePanel({ label, source, record, side }: {
       return <li key={difference.path}><strong>{difference.label}:</strong> {value ? displayValue(value) : "(geen basis beschikbaar)"}</li>;
     })}</ul>}
   </section>;
-}
-
-interface AdvancedMergeRecordComparison {
-  readonly baseFileName: string | null;
-  readonly records: readonly ThreeWayRecordDecision[];
-  readonly summary: Readonly<Record<ThreeWayOutcome, number>>;
 }

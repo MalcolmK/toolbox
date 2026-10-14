@@ -54,14 +54,31 @@ The text differ uses a bounded LCS table. Inputs exceeding its cell limit are
 shown as a single whole-note conflict rather than automatically combined.
 Unknown identities, missing base text, and non-text values do not authorize a
 block merge. These Advanced mode choices remain in the current comparison
-session and are not connected to the database builder. Simple mode has a
-separate database and archive build flow; production download remains blocked
-until the manifest/hash rule is verified.
+session. The `buildAdvancedMergePlan` adapter now converts them to the database
+builder's source-attributed plan shape. It uses internal row references aligned
+to the comparison result instead of guessing source-local IDs, tracks the
+source for each combined field so declared foreign keys can be remapped
+correctly, and reports excluded source values. It blocks unresolved choices,
+unstable or duplicate logical identities, unsupported actions, and rows without
+a safe local key. The optional base remains comparison-only. Once the review
+is confirmed, the page passes that plan through checked SQLite construction,
+the separate provisional POC manifest, archive validation, and the `.jwlibrary`
+download flow. The copied hash is explicitly unverified; the production path
+still uses the separately verified-manifest gate.
+
+The successful-download browser fixture currently uses empty schema-valid
+libraries. A non-empty synthetic pair with identical visible records still
+contains rows (including `Bookmark`, `InputField`, and `Location`) for which
+the current identity rules cannot safely prove cross-source equivalence. The
+Advanced plan therefore remains `needs-review`, and the POC builder refuses
+to emit a file. This is a deliberate data-safety gate, not evidence that
+non-empty Advanced merging has passed. Expanding identity coverage requires a
+separate, evidence-based change to the data model and fixtures.
 
 The session overview counts required whole-record or overlapping-text decisions
 and lists any decisions still open. The completion control is disabled while a
-required choice is missing. It only confirms the review; it does not create an
-archive. The provisional loss overview names each field or text block excluded
+required choice is missing. It confirms the review and enables the build stage
+only for a safe resolved plan. The provisional loss overview names each field or text block excluded
 by a source choice, both-fragment choice, or automatic note change, and exposes
 the full excluded value. For manually entered text it lists both source
 fragments and explains that the app cannot infer which passages were retained.

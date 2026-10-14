@@ -60,6 +60,12 @@ export function ArchiveDownload({ result, summary }: ArchiveDownloadProps) {
         <h3 id="archive-download-heading">Download samengevoegde back-up</h3>
         <p>Het bestand wordt alleen aangeboden nadat database, manifest, mediabestanden en ZIP-controle zijn geslaagd.</p>
       </div>
+      {result.status === "ready" && result.verification === "poc-unverified" && (
+        <div className={styles.downloadBlocked} role="note" aria-label="POC-waarschuwing">
+          <strong>POC-bestand · JW Library-acceptatie is niet geverifieerd</strong>
+          <p>De hash is voorlopig overgenomen uit bron {result.hashSource ?? "onbekend"} en is niet gecontroleerd. De .jwlibrary-bestandsextensie bewijst niet dat JW Library het bestand accepteert. Download alleen als POC en controleer de acceptatie zelf.</p>
+        </div>
+      )}
       {result.status === "blocked" && (
         <div className={styles.downloadBlocked} role="status">
           <strong>Download geblokkeerd</strong>
@@ -67,7 +73,11 @@ export function ArchiveDownload({ result, summary }: ArchiveDownloadProps) {
         </div>
       )}
       <button className={styles.actionButton} type="button" disabled={result.status !== "ready"} onClick={startDownload}>
-        {result.status === "ready" ? `Download ${result.fileName}` : "Download niet beschikbaar"}
+        {result.status !== "ready"
+          ? "Download niet beschikbaar"
+          : result.verification === "poc-unverified"
+            ? `Download POC-bestand · ${result.fileName}`
+            : `Download ${result.fileName}`}
       </button>
       {downloadError && <p className={styles.downloadError} role="alert">{downloadError}</p>}
       {downloaded && result.status === "ready" && (

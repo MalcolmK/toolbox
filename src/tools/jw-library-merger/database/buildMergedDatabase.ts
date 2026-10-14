@@ -33,7 +33,7 @@ export class MergeDatabaseBuildError extends Error {
   }
 }
 
-type RowChoice = { readonly source: MergeDatabaseSource; readonly row: UserDataRow; readonly identity: string | null };
+type RowChoice = { readonly source: MergeDatabaseSource; readonly row: UserDataRow; readonly identity: string | null; readonly fieldSources?: Readonly<Record<string, MergeDatabaseSource>> };
 type Tables = UserDataSnapshot["tables"];
 
 function quote(name: string): string { return `"${name.replaceAll('"', '""')}"`; }
@@ -69,12 +69,19 @@ function plannedRows(
     fail([{ code: "unresolved-plan", message: "Het mergeplan bevat nog onopgeloste records; er wordt geen database gebouwd." }]);
   }
   const result = new Map<string, RowChoice[]>();
+  const omittedIdentities = new Map<string, Set<string>>();
   for (const record of plan.records) {
+    if (record.action === "omit" && !record.selected && record.identityKey !== null) {
+      const omitted = omittedIdentities.get(record.tableName) ?? new Set<string>();
+      omitted.add(record.identityKey);
+      omittedIdentities.set(record.tableName, omitted);
+      continue;
+    }
     if (record.action !== "keep-one" || !record.selected) {
       fail([{ code: "unresolved-plan", message: `De keuze voor ${record.tableName} is niet uitvoerklaar.`, tableName: record.tableName }]);
     }
     const rows = result.get(record.tableName) ?? [];
-    rows.push({ source: record.selected.source, row: record.selected.row, identity: record.identityKey });
+    rows.push({ source: record.selected.source, row: record.selected.row, identity: record.identityKey, fieldSources: record.selected.fieldSources });
     result.set(record.tableName, rows);
   }
   for (const tableName of new Set([...Object.keys(snapshotA.tables), ...Object.keys(snapshotB.tables)])) {
@@ -91,7 +98,8 @@ function plannedRows(
           return identity !== null && choice.identity === identity
             && identifyRecord(chosenSnapshot, tableName, choice.row).key === identity;
         });
-        if (!covered) fail([{ code: "unknown-table", message: `Rij in ${tableName} uit bron ${source} ontbreekt in het mergeplan; de rij wordt niet stilzwijgend weggelaten.`, tableName }]);
+        const intentionallyOmitted = omittedIdentities.get(tableName)?.has(identity ?? "") ?? false;
+        if (!covered && !intentionallyOmitted) fail([{ code: "unknown-table", message: `Rij in ${tableName} uit bron ${source} ontbreekt in het mergeplan; de rij wordt niet stilzwijgend weggelaten.`, tableName }]);
       }
     }
   }
@@ -138,7 +146,8 @@ function resolveOutputId(
 
 function remapRow(
   source: MergeDatabaseSource,
-  snapshot: UserDataSnapshot,
+  fieldSources: Readonly<Record<string, MergeDatabaseSource>> | undefined,
+  snapshots: Readonly<Record<MergeDatabaseSource, UserDataSnapshot>>,
   tableName: string,
   row: UserDataRow,
   table: UserDataSnapshot["tables"][string],
@@ -150,7 +159,9 @@ function remapRow(
   for (const key of table.foreignKeys) {
     const value = row[key.fromColumn];
     if (value === null || value === undefined) continue;
-    const targetTable = snapshot.tables[key.referencedTable];
+    const relationshipSource = fieldSources?.[key.fromColumn] ?? source;
+    const relationshipSnapshot = snapshots[relationshipSource];
+    const targetTable = relationshipSnapshot.tables[key.referencedTable];
     const targetPrimaryKey = targetTable?.primaryKey.length === 1 ? targetTable.primaryKey[0] : null;
     if (key.toColumn && key.toColumn !== targetPrimaryKey) {
       if (key.referencedTable !== "IndependentMedia" || key.toColumn !== "FilePath") {
@@ -158,17 +169,19 @@ function remapRow(
       }
       const media = targetTable?.rows.find((candidate) => candidate.FilePath === value);
       if (!media) throw new MergeDatabaseBuildError([{ code: "unmapped-reference", message: `${tableName}.${key.fromColumn} kon de gekoppelde mediabron niet terugvinden.`, tableName }]);
-      const mediaIdentity = identifyRecord(snapshot, "IndependentMedia", media).key;
-      const mediaLocalKey = sourceKey(snapshot, "IndependentMedia", media);
+      const mediaIdentity = identifyRecord(relationshipSnapshot, "IndependentMedia", media).key;
+      const mediaLocalKey = sourceKey(relationshipSnapshot, "IndependentMedia", media);
       const selected = rowsByTable.get("IndependentMedia")?.find((candidate) => {
-        return (candidate.source === source && sourceKey(snapshot, "IndependentMedia", candidate.row) === mediaLocalKey)
+        return (candidate.source === relationshipSource && sourceKey(relationshipSnapshot, "IndependentMedia", candidate.row) === mediaLocalKey)
           || (mediaIdentity !== null && candidate.identity === mediaIdentity);
       });
       if (!selected) throw new MergeDatabaseBuildError([{ code: "unmapped-reference", message: `${tableName}.${key.fromColumn} verwijst naar media die niet in de uitvoer is opgenomen.`, tableName }]);
       mapped[key.fromColumn] = selected.row.FilePath ?? null;
       continue;
     }
-    const reference = resolveOutputId(source, snapshot, key.referencedTable, { [key.toColumn ?? snapshot.tables[key.referencedTable]?.primaryKey[0] ?? ""]: value }, key.toColumn ?? snapshot.tables[key.referencedTable]?.primaryKey[0] ?? "", maps);
+    const referenceTarget = relationshipSnapshot.tables[key.referencedTable];
+    const referenceColumn = key.toColumn ?? referenceTarget?.primaryKey[0] ?? "";
+    const reference = resolveOutputId(relationshipSource, relationshipSnapshot, key.referencedTable, { [referenceColumn]: value }, referenceColumn, maps);
     if (reference === undefined) throw new MergeDatabaseBuildError([{ code: "unmapped-reference", message: `${tableName}.${key.fromColumn} kon niet veilig naar ${key.referencedTable} worden omgekoppeld.`, tableName }]);
     mapped[key.fromColumn] = reference;
   }
@@ -279,7 +292,7 @@ export async function buildMergedDatabase(
         const row = { ...choice.row } as Record<string, SqlValue>;
         const pk = table.primaryKey.length === 1 ? table.primaryKey[0]! : null;
         if (pk) row[pk] = ids.get(`${tableName}\u0000${choice.source}\u0000${sourceKey(snapshot, tableName, choice.row)!}`)!;
-        const remapped = remapRow(choice.source, snapshot, tableName, row, table, rowsByTable, mapLookup);
+        const remapped = remapRow(choice.source, choice.fieldSources, { A: snapshotA, B: snapshotB }, tableName, row, table, rowsByTable, mapLookup);
         const placeholders = columns.map(() => "?").join(", ");
         database.run(`INSERT INTO ${quote(tableName)} (${columns.map(quote).join(", ")}) VALUES (${placeholders})`, columns.map((column) => remapped[column] ?? null));
       }

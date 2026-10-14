@@ -2,6 +2,7 @@ import JSZip from "jszip";
 import type { BuiltMergedDatabase } from "../database/buildMergedDatabase";
 import type { LoadedJwLibrary } from "./readJwLibrary";
 import type { ManifestBuildResult, ReadyManifestBuild } from "./buildManifest";
+import type { PocManifestBuildResult } from "./buildPocManifest";
 
 export interface WriteJwLibraryInput {
   readonly database: BuiltMergedDatabase;
@@ -40,6 +41,9 @@ export type JwLibraryWriteResult =
       readonly bytes: Uint8Array;
       readonly fileName: string;
       readonly entryNames: readonly string[];
+      readonly verification: "hash-verified" | "poc-unverified";
+      /** Present only for the POC path, so the provisional hash has provenance. */
+      readonly hashSource?: "A" | "B";
     };
 
 function blocked(...issues: JwLibraryWriteIssue[]): JwLibraryWriteResult {
@@ -63,29 +67,18 @@ function outputFileName(date: Date): string | null {
   return `JWLibrary-Merged-${date.toISOString().slice(0, 10)}.jwlibrary`;
 }
 
-function isReadyManifest(result: ManifestBuildResult): result is ReadyManifestBuild {
-  return result.status === "ready" && result.hashVerified === true;
-}
-
 async function readEntry(library: LoadedJwLibrary, path: string): Promise<Uint8Array | null> {
   const entry = library.archive.file(path);
   return entry ? entry.async("uint8array") : null;
 }
 
-/**
- * Builds a new .jwlibrary ZIP only from a manifest explicitly marked hash-verified.
- * It preserves source entries, fails on ambiguous path collisions, and reopens
- * the generated ZIP to verify the manifest, database, and referenced files.
- */
-export async function writeJwLibrary(input: WriteJwLibraryInput): Promise<JwLibraryWriteResult> {
-  if (!isReadyManifest(input.manifest)) {
-    return blocked({
-      code: "manifest-not-verified",
-      message: input.manifest.status === "blocked"
-        ? input.manifest.message
-        : "Export geblokkeerd: het manifest is niet gemarkeerd als hash-gecontroleerd.",
-    });
-  }
+type AcceptedManifest = ReadyManifestBuild | Extract<PocManifestBuildResult, { status: "ready-unverified" }>;
+
+async function writeArchive(
+  input: Omit<WriteJwLibraryInput, "manifest"> & { readonly manifest: AcceptedManifest },
+  verification: "hash-verified" | "poc-unverified",
+  hashSource?: "A" | "B",
+): Promise<JwLibraryWriteResult> {
   if (input.database.integrity !== "ok" || input.database.bytes.byteLength === 0) {
     return blocked({ code: "invalid-database", message: "Export geblokkeerd: er zijn geen gecontroleerde databasebytes beschikbaar." });
   }
@@ -189,8 +182,57 @@ export async function writeJwLibrary(input: WriteJwLibraryInput): Promise<JwLibr
       if (!reopened.file(path)) return blocked({ code: "archive-verification-failed", message: `De gemaakte ZIP mist het door de database vereiste bestand "${path}".`, path });
     }
     const entryNames = Object.values(reopened.files).filter((entry) => !entry.dir).map((entry) => entry.name);
-    return { status: "ready", issues: [], bytes, fileName, entryNames };
+    return {
+      status: "ready",
+      issues: [],
+      bytes,
+      fileName,
+      entryNames,
+      verification,
+      ...(hashSource ? { hashSource } : {}),
+    };
   } catch {
     return blocked({ code: "archive-verification-failed", message: "De gemaakte ZIP kon niet opnieuw worden geopend en gecontroleerd." });
   }
+}
+
+/**
+ * Production entry point. It only accepts manifests whose hash was verified by
+ * the production hash-rule implementation; the current implementation still
+ * blocks until that rule is established.
+ */
+export async function writeJwLibrary(input: WriteJwLibraryInput): Promise<JwLibraryWriteResult> {
+  if (input.manifest.status !== "ready" || input.manifest.hashVerified !== true) {
+    return blocked({
+      code: "manifest-not-verified",
+      message: input.manifest.status === "blocked"
+        ? input.manifest.message
+        : "Export geblokkeerd: het manifest is niet gemarkeerd als hash-gecontroleerd.",
+    });
+  }
+  return writeArchive(input as Omit<WriteJwLibraryInput, "manifest"> & { manifest: ReadyManifestBuild }, "hash-verified");
+}
+
+export interface WritePocJwLibraryInput extends Omit<WriteJwLibraryInput, "manifest"> {
+  readonly manifest: PocManifestBuildResult;
+}
+
+/**
+ * Explicit POC-only entry point. It accepts a copied source hash only when its
+ * result is visibly marked unverified; it does not alter the production gate.
+ */
+export async function writePocJwLibrary(input: WritePocJwLibraryInput): Promise<JwLibraryWriteResult> {
+  if (input.manifest.status !== "ready-unverified" || input.manifest.hashVerified !== false) {
+    return blocked({
+      code: "manifest-not-verified",
+      message: input.manifest.status === "blocked"
+        ? input.manifest.message
+        : "POC-export geblokkeerd: het manifest moet expliciet als niet-geverifieerd zijn gemarkeerd.",
+    });
+  }
+  return writeArchive(
+    input as Omit<WriteJwLibraryInput, "manifest"> & { manifest: Extract<PocManifestBuildResult, { status: "ready-unverified" }> },
+    "poc-unverified",
+    input.manifest.hashSource,
+  );
 }

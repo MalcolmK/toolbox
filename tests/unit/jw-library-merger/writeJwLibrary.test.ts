@@ -1,8 +1,9 @@
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { buildManifest, type ReadyManifestBuild } from "../../../src/tools/jw-library-merger/archive/buildManifest";
+import { buildPocManifest } from "../../../src/tools/jw-library-merger/archive/buildPocManifest";
 import { readJwLibrary, type JwLibraryManifest } from "../../../src/tools/jw-library-merger/archive/readJwLibrary";
-import { writeJwLibrary, type WriteJwLibraryInput } from "../../../src/tools/jw-library-merger/archive/writeJwLibrary";
+import { writeJwLibrary, writePocJwLibrary, type WriteJwLibraryInput } from "../../../src/tools/jw-library-merger/archive/writeJwLibrary";
 import type { BuiltMergedDatabase } from "../../../src/tools/jw-library-merger/database/buildMergedDatabase";
 
 const bytes = (...values: number[]) => new Uint8Array(values);
@@ -56,6 +57,50 @@ describe("writeJwLibrary", () => {
       expect(result.bytes).toBeNull();
       expect(result.issues[0]?.code).toBe("manifest-not-verified");
     }
+  });
+
+  it("writes a POC archive only through the explicit unverified route and marks its result", async () => {
+    const sources = [await sourceLibrary("a.jwlibrary", { "media/required.bin": bytes(8) }), await sourceLibrary("b.jwlibrary", { "media/required.bin": bytes(8) })] as const;
+    const manifest = buildPocManifest({
+      sourceManifest: sources[1].manifest,
+      databaseName: "userData.db",
+      hashSource: "B",
+      createdAt: new Date("2026-10-14T12:00:00Z"),
+    });
+    expect(manifest.status).toBe("ready-unverified");
+    const result = await writePocJwLibrary({ database: database(), manifest, sourceLibraries: sources, createdAt: new Date("2026-10-14T12:00:00Z") });
+
+    expect(result).toMatchObject({ status: "ready", fileName: "JWLibrary-Merged-2026-10-14.jwlibrary", verification: "poc-unverified" });
+    if (result.status !== "ready") return;
+    const reopened = await JSZip.loadAsync(result.bytes, { checkCRC32: true });
+    const manifestText = await reopened.file("manifest.json")?.async("string");
+    expect(JSON.parse(manifestText ?? "{}").userDataBackup.hash).toBe("source-hash");
+    expect(Array.from(await reopened.file("media/required.bin")!.async("uint8array"))).toEqual([8]);
+
+  });
+
+  it("does not let the POC writer accept a hash-verified production manifest", async () => {
+    const sources = [await sourceLibrary("a.jwlibrary", { "media/required.bin": bytes(8) }), await sourceLibrary("b.jwlibrary", { "media/required.bin": bytes(8) })] as const;
+    const result = await writePocJwLibrary({ database: database(), manifest: verifiedSyntheticManifest(), sourceLibraries: sources });
+    expect(result).toMatchObject({ status: "blocked", bytes: null });
+    if (result.status === "blocked") expect(result.issues[0]?.code).toBe("manifest-not-verified");
+  });
+
+  it("does not let the production writer accept an explicitly unverified POC manifest", async () => {
+    const sources = [await sourceLibrary("a.jwlibrary", { "media/required.bin": bytes(8) }), await sourceLibrary("b.jwlibrary", { "media/required.bin": bytes(8) })] as const;
+    const pocManifest = buildPocManifest({
+      sourceManifest: sources[0].manifest,
+      databaseName: "userData.db",
+      hashSource: "A",
+      createdAt: new Date("2026-10-14T12:00:00Z"),
+    });
+    const result = await writeJwLibrary({
+      database: database(),
+      manifest: pocManifest as unknown as WriteJwLibraryInput["manifest"],
+      sourceLibraries: sources,
+    });
+    expect(result).toMatchObject({ status: "blocked", bytes: null, fileName: null });
+    if (result.status === "blocked") expect(result.issues[0]?.code).toBe("manifest-not-verified");
   });
 
   it("blocks empty or unchecked SQLite bytes before packaging", async () => {

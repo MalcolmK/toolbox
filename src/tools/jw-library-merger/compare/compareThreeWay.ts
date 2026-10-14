@@ -30,6 +30,8 @@ export interface ThreeWayComparison {
   readonly sourceAFileName: string;
   readonly sourceBFileName: string;
   readonly records: readonly ThreeWayRecordDecision[];
+  /** Internal source-local row references aligned by record index; not UI display data. */
+  readonly rowReferences: readonly { readonly sourceA: UserDataRow | null; readonly sourceB: UserDataRow | null }[];
   readonly summary: Readonly<Record<ThreeWayOutcome, number>>;
 }
 
@@ -188,6 +190,7 @@ export function compareThreeWay(
   const baseAIndex = base ? pairIndex(compareLibraries(base, sourceA)) : new Map<string, ComparedRecord[]>();
   const baseBIndex = base ? pairIndex(compareLibraries(base, sourceB)) : new Map<string, ComparedRecord[]>();
   const records: ThreeWayRecordDecision[] = [];
+  const rowReferences: { sourceA: UserDataRow | null; sourceB: UserDataRow | null }[] = [];
   const allKeys = new Set([...aGroups.keys(), ...bGroups.keys(), ...baseGroups.keys()]);
 
   for (const key of [...allKeys].sort()) {
@@ -380,6 +383,7 @@ export function compareThreeWay(
         overlappingChanges: [],
       });
     }
+    rowReferences.push({ sourceA: rowA, sourceB: rowB });
   }
 
   // Candidate and unidentifiable rows are still surfaced for review. Their
@@ -424,6 +428,7 @@ export function compareThreeWay(
         overlappingChanges: [],
         outcome: "uncertain",
       });
+      rowReferences.push({ sourceA: rowA, sourceB: rowB });
     });
 
   const summary = emptySummary();
@@ -433,6 +438,7 @@ export function compareThreeWay(
     sourceAFileName: sourceA.sourceFileName,
     sourceBFileName: sourceB.sourceFileName,
     records,
+    rowReferences,
     summary,
   };
 }

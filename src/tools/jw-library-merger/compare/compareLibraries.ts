@@ -97,6 +97,44 @@ interface RelationshipTarget {
   readonly reason: string | null;
 }
 
+interface IndexedTargetRow {
+  readonly row: UserDataRow;
+  readonly index: number;
+}
+
+type RelationshipIndexes = WeakMap<UserDataSnapshot, Map<string, Map<string, Map<SqlValue, IndexedTargetRow>>>>;
+
+function relationshipIndex(
+  indexes: RelationshipIndexes,
+  snapshot: UserDataSnapshot,
+  tableName: string,
+  columnName: string,
+): Map<SqlValue, IndexedTargetRow> {
+  let snapshotIndexes = indexes.get(snapshot);
+  if (!snapshotIndexes) {
+    snapshotIndexes = new Map();
+    indexes.set(snapshot, snapshotIndexes);
+  }
+  let tableIndexes = snapshotIndexes.get(tableName);
+  if (!tableIndexes) {
+    tableIndexes = new Map();
+    snapshotIndexes.set(tableName, tableIndexes);
+  }
+  let columnIndex = tableIndexes.get(columnName);
+  if (!columnIndex) {
+    columnIndex = new Map();
+    const rows = snapshot.tables[tableName]?.rows ?? [];
+    rows.forEach((row, index) => {
+      const value = row[columnName];
+      if (value !== null && value !== undefined && !columnIndex!.has(value)) {
+        columnIndex!.set(value, { row, index });
+      }
+    });
+    tableIndexes.set(columnName, columnIndex);
+  }
+  return columnIndex;
+}
+
 const primaryConflictFields: Readonly<Record<string, readonly string[]>> = {
   Note: ["Title", "Content", "Created"],
   UserMark: ["ColorIndex", "StyleIndex", "Version"],
@@ -186,6 +224,7 @@ function compareFields(
 }
 
 function resolveRelationship(
+  indexes: RelationshipIndexes,
   snapshot: UserDataSnapshot,
   tableName: string,
   row: UserDataRow | null,
@@ -217,8 +256,8 @@ function resolveRelationship(
       reason: `De doelkolom van ${tableName}.${fromColumn} → ${targetTable} is niet bekend.`,
     };
   }
-  const index = target.rows.findIndex((targetRow) => targetRow[resolvedColumn] === sourceValue);
-  if (index < 0) {
+  const targetRecord = relationshipIndex(indexes, snapshot, targetTable, resolvedColumn).get(sourceValue);
+  if (!targetRecord) {
     return {
       presence: "unresolved",
       identityKey: null,
@@ -227,8 +266,7 @@ function resolveRelationship(
     };
   }
 
-  const targetRow = target.rows[index]!;
-  const targetIdentity = identifyRecord(snapshot, targetTable, targetRow, index);
+  const targetIdentity = identifyRecord(snapshot, targetTable, targetRecord.row, targetRecord.index);
   if (targetIdentity.key === null || targetIdentity.status === "uncertain") {
     return {
       presence: "unresolved",
@@ -247,6 +285,7 @@ function resolveRelationship(
 }
 
 function compareRelationships(
+  indexes: RelationshipIndexes,
   snapshotA: UserDataSnapshot,
   snapshotB: UserDataSnapshot,
   tableName: string,
@@ -267,10 +306,10 @@ function compareRelationships(
   const differences: RelationshipDifference[] = [];
   for (const reference of references.values()) {
     const targetA = resolveRelationship(
-      snapshotA, tableName, rowA, reference.fromColumn, reference.tableName, reference.toColumn,
+      indexes, snapshotA, tableName, rowA, reference.fromColumn, reference.tableName, reference.toColumn,
     );
     const targetB = resolveRelationship(
-      snapshotB, tableName, rowB, reference.fromColumn, reference.tableName, reference.toColumn,
+      indexes, snapshotB, tableName, rowB, reference.fromColumn, reference.tableName, reference.toColumn,
     );
     let status: RelationshipStatus;
     let reason: string | null = null;
@@ -369,6 +408,7 @@ function makeUncertain(
 }
 
 function makePaired(
+  indexes: RelationshipIndexes,
   snapshotA: UserDataSnapshot,
   snapshotB: UserDataSnapshot,
   tableName: string,
@@ -379,7 +419,7 @@ function makePaired(
   const tableB = snapshotB.tables[tableName];
   const fieldDifferences = compareFields(tableName, tableA, tableB, entryA.row, entryB.row);
   const relationshipDifferences = compareRelationships(
-    snapshotA, snapshotB, tableName, tableA, tableB, entryA.row, entryB.row,
+    indexes, snapshotA, snapshotB, tableName, tableA, tableB, entryA.row, entryB.row,
   );
   const uncertaintyReasons = relationshipDifferences
     .filter((difference) => difference.status === "uncertain")
@@ -420,6 +460,7 @@ function makePaired(
 }
 
 function compareTable(
+  indexes: RelationshipIndexes,
   snapshotA: UserDataSnapshot,
   snapshotB: UserDataSnapshot,
   tableName: string,
@@ -440,7 +481,7 @@ function compareTable(
     const groupA = stableGroupsA.get(key) ?? [];
     const groupB = stableGroupsB.get(key) ?? [];
     if (groupA.length === 1 && groupB.length === 1) {
-      result.push(makePaired(snapshotA, snapshotB, tableName, groupA[0]!, groupB[0]!));
+      result.push(makePaired(indexes, snapshotA, snapshotB, tableName, groupA[0]!, groupB[0]!));
     } else if (groupA.length === 1 && groupB.length === 0) {
       result.push(makeOneSided(tableName, groupA[0]!, "A"));
     } else if (groupB.length === 1 && groupA.length === 0) {
@@ -459,7 +500,7 @@ function compareTable(
     const groupA = candidateGroupsA.get(key) ?? [];
     const groupB = candidateGroupsB.get(key) ?? [];
     if (groupA.length === 1 && groupB.length === 1) {
-      result.push(makePaired(snapshotA, snapshotB, tableName, groupA[0]!, groupB[0]!));
+      result.push(makePaired(indexes, snapshotA, snapshotB, tableName, groupA[0]!, groupB[0]!));
     } else {
       const duplicate = groupA.length > 1 || groupB.length > 1;
       for (const entry of groupA) result.push(makeUncertain(tableName, entry, null,
@@ -507,8 +548,9 @@ export function compareLibraries(
     ...Object.keys(snapshotA.tables),
     ...Object.keys(snapshotB.tables),
   ])].sort();
+  const relationshipIndexes: RelationshipIndexes = new WeakMap();
   const records = tableNames.flatMap((tableName) =>
-    compareTable(snapshotA, snapshotB, tableName),
+    compareTable(relationshipIndexes, snapshotA, snapshotB, tableName),
   );
   const countsByStatus = emptyCounts();
   const perTable: Record<string, Record<ComparisonStatus, number>> = {};

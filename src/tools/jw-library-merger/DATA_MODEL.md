@@ -263,9 +263,14 @@ deleting or reinserting that singleton.
 
 This builder produces database bytes only. It does not rewrite the manifest or
 validate/calculate its hash. Archive packaging is handled separately in
-section 11. Advanced review currently does not pass its in-page decisions to
-this builder. A plan that still has unresolved identity or record choices is
-deliberately rejected.
+section 11. `buildAdvancedMergePlan` now converts the reviewed Advanced A/B
+choices to the same source-attributed plan shape, including per-field source
+provenance for foreign-key remapping and explicit loss entries. It resolves
+supported note-text choices and leaves unknown identities, missing local keys,
+unsupported actions, and open conflicts unresolved so this builder rejects
+them. The browser page passes a confirmed Advanced plan through the checked
+database builder and separate provisional POC manifest/archive pipeline.
+Only A and B are output sources; an optional base remains comparison-only.
 
 ## 10. Manifest/hash gate (implementation step 23)
 
@@ -320,21 +325,22 @@ Before returning bytes, the writer reopens the ZIP with CRC checking and
 compares the embedded manifest and database bytes with the supplied values. It
 also checks every database-referenced media path is present. The ZIP structure
 is tested with synthetic fixtures only; this does not establish that JW
-Library accepts the archive. The current `buildManifest` still always returns
-`blocked` because the hash rule in section 10 remains unverified, so the
-application cannot currently get a hash-verified manifest or produce this
-archive. The ready-manifest case in writer unit tests is synthetic plumbing to
-exercise ZIP assembly, not evidence that its test hash matches JW Library.
+Library accepts the archive. The production `buildManifest` remains blocked
+because the hash rule in section 10 is unverified. A separate POC path copies
+a selected source hash and labels it `ready-unverified`; it does not pass
+through the production hash gate or claim app compatibility. ZIP round-trip
+checks establish archive consistency, not JW Library acceptance.
 
 ## 12. Download gate (implementation step 25)
 
-`archive/buildSimpleJwLibrary.ts` reconnects the resolved Simple mode plan to
-the output pipeline: it revalidates both retained source archives, builds the
-SQLite database, asks the manifest builder for a verified manifest, and passes
-that result to the archive writer. It closes both temporary SQLite connections
-in a `finally` block. The Advanced mode review is not connected to this output
-pipeline because its in-page decisions do not yet produce a resolved database
-plan.
+`archive/buildSimpleJwLibrary.ts` is the production Simple path and remains
+fail-closed at manifest generation. The separate POC paths connect resolved
+Simple and Advanced plans to checked SQLite construction, provisional
+manifest creation, and POC archive writing. The Advanced builder accepts the
+source-attributed review plan, revalidates A and B, selects a source hash from
+timestamps for the explicitly unverified POC manifest, and packages only A/B
+archives. Both POC builders close temporary SQLite connections in a `finally`
+block. The optional Advanced base is never an output source.
 
 `components/ArchiveDownload.tsx` enables the standard browser download only
 when the archive writer returns `ready`, which requires database, manifest,
@@ -346,14 +352,14 @@ download window or when the component unmounts. A new comparison or cleared
 result drops the previous result state; no user data is stored in
 `localStorage`.
 
-The current manifest builder remains fail-closed, so the UI's output step
-builds and checks the database, then displays the manifest-hash reason and a
-disabled download button. Browser tests verify this blocked state and that no
-download link is created. They cannot verify a successful browser download
-until the hash rule is resolved. The browser UI flows are exercised in
-Chromium and Microsoft Edge, but the successful download path remains
-unreachable. Actual Safari checks and JW Library restore acceptance remain
-later platform checks.
+The production manifest builder remains fail-closed. In the separate POC
+route, both modes can show a download only when database, provisional
+manifest, media, ZIP generation, and archive round-trip checks pass. The
+interface identifies the hash as copied and unverified before enabling the
+download. Browser tests cover successful `.jwlibrary` download behavior in
+Chromium, Microsoft Edge, and WebKit. These checks do not prove acceptance by
+JW Library; actual Safari checks and JW Library restore acceptance remain
+outside the automated evidence.
 
 ## 13. Download and failure-case tests (implementation step 26)
 
@@ -367,23 +373,26 @@ The automated checks are split by responsibility:
   database bytes. These are the duplicate-identity and unresolved-decision
   safeguards before archive writing.
 - `writeJwLibrary.test.ts` reopens generated output with CRC checking, compares
-  the manifest/database/media bytes, and checks blocked outcomes for an
-  unverified hash, malformed or inconsistent manifest, empty or unchecked
-  database, missing media, conflicting media payloads, duplicate-path
-  payload conflicts, and unsafe paths. A ready result is possible in this
-  isolated writer test only with a clearly synthetic manifest marked verified;
-  it is not evidence that the production JW hash rule is verified.
-- `simple-merge-workflow.e2e.ts` runs the browser build stage and checks that
-  the production hash block leaves the download button disabled, creates no
-  download link, and sends no request body.
+  the manifest/database/media bytes, and checks blocked outcomes for
+  unverified production hashes, malformed or inconsistent manifests, empty
+  or unchecked databases, missing media, conflicting archive entries, and
+  unsafe paths. Separate POC-writer cases verify explicitly unverified
+  manifests without weakening the production gate.
+- `buildSimplePocJwLibrary.test.ts` and
+  `buildAdvancedPocJwLibrary.test.ts` check resolved and unresolved build
+  plans, hash provenance, and archive output. A populated Advanced pair with
+  rows lacking safely reconcilable identities is explicitly blocked.
+- `simple-merge-workflow.e2e.ts` checks the successful POC download, its
+  warning, `.jwlibrary` filename, and no-upload behavior in both modes, plus
+  review, error, keyboard, theme, and responsive flows.
 
-The current manifest builder always fails closed, so malformed-manifest and
-valid-output writer branches that require a verified manifest are tested with
-synthetic writer inputs. No production download can pass until the actual hash
-rule is established. The Playwright UI flows have been run in Chromium and
-Microsoft Edge. Playwright WebKit is not installed in this environment, and
-actual Safari and successful download behavior remain unverified platform
-checks, along with JW Library restore acceptance.
+The production manifest builder always fails closed, so production download
+remains unavailable until the actual hash rule is established. The separate
+POC writer is allowed to use a copied hash only when it marks that hash
+unverified. Successful browser downloads are automated in Chromium, Microsoft
+Edge, and WebKit. These synthetic successful-download fixtures are empty
+libraries; they do not prove a populated Advanced merge. Actual Safari and
+JW Library restore acceptance remain unverified manual checks.
 
 ## 14. Full browser workflow (implementation step 27)
 
@@ -392,23 +401,23 @@ Simple mode comparison, Advanced two- and three-way review, timestamp and
 conflict display, changing a choice after navigating back, block/line text
 decisions, invalid-file feedback, the guarded build/download stage, keyboard
 file selection, theme controls, and responsive layouts at 375, 768, and 1440
-pixels. The suite has six end-to-end tests and passed in both installed
-Chromium and Microsoft Edge.
+pixels. The suite has seven end-to-end tests and 21 configured runs: seven
+each in Chromium, Microsoft Edge, and WebKit.
 
-The build/download flow test verifies the current expected stop: the
-unverified production hash keeps the download disabled, creates no download
-link, and sends no request body. It cannot verify an actual successful
-download. Playwright WebKit and Apple Safari were unavailable for this run;
-real Safari behavior and JW Library restore acceptance remain unverified.
+The build/download flows verify successful POC downloads in both modes, the
+pre-download unverified-hash warning, `.jwlibrary` filenames, and that file
+contents are not uploaded. They do not verify a production hash or JW Library
+acceptance. WebKit is useful Safari-engine coverage but is not Apple's Safari.
 ## 15. JW Library restore acceptance (implementation step 28)
 
-This step remains a required release gate. It cannot be run yet: the
-production manifest builder in step 23 returns `blocked` for every candidate
-because the JW Library hash rule has not been established. The browser can
-therefore produce no production-valid merged `.jwlibrary` file to open in the
-app. A synthetic writer test manifest with `hashVerified: true` is deliberately
-isolated test plumbing and must not be passed off as a valid JW Library test
-backup.
+The user plans to check whether a downloaded POC `.jwlibrary` file is accepted
+by JW Library. This remains a manual acceptance check: the production
+manifest/hash route is still blocked, while the POC route labels its copied
+source hash explicitly unverified. Automated ZIP, SQLite, CRC, and browser
+download checks do not establish JW Library compatibility or complete data
+retention. The successful automated download fixture is empty; populated
+Advanced input may still be blocked when identities cannot be safely
+reconciled.
 
 The current Windows environment also has no detected JW Library AppX package
 or Android Debug Bridge, and no iOS/iPadOS device is connected through this
@@ -416,27 +425,29 @@ workspace. No personal backup was used for this step. No claim is made that a
 merged archive has been accepted by JW Library or that all data survives a
 restore.
 
-Once step 23 is verified and a disposable test environment is available, run
-this acceptance sequence using only synthetic content:
+Use a disposable JW Library test profile or device and a downloaded POC file.
+For the current automated output, follow this acceptance sequence:
 
-1. Create and keep a separate original synthetic `.jwlibrary` fixture with a
-   note, a mark, a range, and a tag/tag-map relationship. Record the expected
-   rows and values before merging.
-2. Make two synthetic candidate backups with known, distinct changes, merge
-   them through the production flow, and require all database, manifest, ZIP,
-   CRC, and referenced-media checks to pass. Confirm the downloaded filename
-   ends in `.jwlibrary`.
-3. Open the merged file in a disposable JW Library test profile or device,
-   without replacing a personal library. Record whether the app accepts it and
-   whether the expected note, mark, range, and tag relationship are present.
-4. Close and reopen the test library, check the same content again, and compare
-   the resulting data with the recorded expectation. Record any rejection,
-   missing value, changed relationship, or unopenable backup as a failed gate.
-5. Preserve the synthetic input fixtures, expected-value record, app/platform
-   version, observed outcome, and any safely redacted diagnostics as test
-   evidence. Do not place personal `.jwlibrary` files in the repository.
+1. Produce the `.jwlibrary` through a ready POC plan. Confirm the interface
+   identifies the copied hash as unverified and the filename ends in
+   `.jwlibrary`. If a populated Advanced plan remains blocked, record that as
+   an identity-coverage limitation and do not bypass the gate.
+2. Open the downloaded file in a disposable JW Library test profile or device,
+   without replacing a personal library. Record whether the app accepts it.
+   The automated download fixture is empty, so it cannot prove retention of
+   notes, marks, ranges, tags, or relationships.
+3. Close and reopen the test library and record whether it remains available.
+   Do not interpret this empty-library check as proof of populated-data
+   preservation.
+4. Once a populated merge can safely pass the planner, repeat acceptance with
+   a separate synthetic fixture containing a note, mark, range, and tag-map;
+   record expected rows first and compare every value and relationship after
+   restore and reopen.
+5. Preserve the fixture names, expected-value record, app/platform version,
+   observed outcome, and safely redacted diagnostics as test evidence. Do not
+   place personal `.jwlibrary` files in the repository.
 
-**Current outcome:** blocked before archive creation by the unresolved hash
-rule; app acceptance and round-trip data retention are not verified. Do not
-enable a production download or mark step 28 complete until this sequence
-passes.
+**Current outcome:** POC download creation is automated for both modes using
+empty synthetic libraries, but no POC has been restored in JW Library. The
+production hash gate remains blocked. App acceptance and round-trip data
+retention are not verified.

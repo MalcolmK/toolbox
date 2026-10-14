@@ -1,9 +1,35 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Download } from "@playwright/test";
+import JSZip from "jszip";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const fixture = (name: string) => resolve(testDirectory, "../fixtures/jw-library", name);
+
+async function inspectDownloadedJwLibrary(download: Download) {
+  const stream = await download.createReadStream();
+  if (!stream) throw new Error("De browserdownload kon niet worden gelezen.");
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const archive = await JSZip.loadAsync(Buffer.concat(chunks), { checkCRC32: true });
+  const manifestText = await archive.file("manifest.json")?.async("string");
+  expect(manifestText).toBeTruthy();
+  const manifest = JSON.parse(manifestText ?? "{}") as { userDataBackup?: { databaseName?: string; hash?: string } };
+  const databaseName = manifest.userDataBackup?.databaseName;
+  expect(databaseName).toBeTruthy();
+  expect(await archive.file(databaseName ?? "")?.async("uint8array")).toBeTruthy();
+  expect(manifest.userDataBackup?.hash).toBeTruthy();
+  return { entryNames: Object.keys(archive.files).filter((name) => !archive.files[name]?.dir), manifest };
+}
+
+async function selectedSourceDigests(page: import("@playwright/test").Page) {
+  return page.locator('input[type="file"]').evaluateAll(async (inputs) => Promise.all(
+    inputs.flatMap((input) => Array.from((input as HTMLInputElement).files ?? [])).map(async (file) => {
+      const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+      return `${file.name}:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+    }),
+  ));
+}
 
 test("selects two synthetic backups, shows the Simple mode plan, and stays usable across viewport sizes", async ({ page }) => {
   await page.goto("#library-merger");
@@ -74,6 +100,7 @@ test("reviews conflicts one at a time with source values, timestamps, and revers
   await expect(review.getByRole("region", { name: "Basis" })).toBeVisible();
   await expect(review.getByText(/Archief aangemaakt/).first()).toBeVisible();
   await expect(review.getByText(/Synthetic note/).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Naar bestand maken" })).toHaveCount(0);
   await expect(review.getByRole("button", { name: "Vorig conflict" })).toBeDisabled();
 
   await review.getByRole("group", { name: "Keuze voor dit conflict" }).getByRole("button", { name: "Behoud A" }).click();
@@ -144,7 +171,7 @@ test("compares note blocks by default, supports line choices, both variants, and
   }
 });
 
-test("runs the local build stage for a resolved plan and keeps download blocked without a verified manifest", async ({ page }) => {
+test("builds and downloads a Simple-mode POC .jwlibrary with an explicit unverified-hash warning", async ({ page }) => {
   const requestBodies: string[] = [];
   page.on("request", (request) => {
     const body = request.postData();
@@ -156,14 +183,66 @@ test("runs the local build stage for a resolved plan and keeps download blocked 
   await page.getByRole("button", { name: "Controleer en maak mergeplan" }).click();
 
   await expect(page.getByText("Keuzes afgerond")).toBeVisible();
+  const sourceDigestsBefore = await selectedSourceDigests(page);
   await expect(page.getByRole("button", { name: "Naar bestand maken" })).toBeEnabled();
   await page.getByRole("button", { name: "Naar bestand maken" }).click();
   await expect(page.getByRole("heading", { name: "Back-up opbouwen en controleren" })).toBeVisible();
   await page.getByRole("button", { name: "Bestand maken en controleren" }).click();
-  await expect(page.getByText(/Download geblokkeerd/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Download niet beschikbaar" })).toBeDisabled();
-  await expect(page.locator("a[download]")).toHaveCount(0);
-  await expect(page.getByText(/hash-regel.*niet geverifieerd/i)).toBeVisible();
+  const pocNotice = page.getByRole("note", { name: "POC-waarschuwing" });
+  await expect(pocNotice).toBeVisible();
+  await expect(pocNotice).toContainText(/hash is voorlopig overgenomen uit bron A/i);
+  await expect(pocNotice).toContainText(/acceptatie is niet geverifieerd/i);
+  const downloadButton = page.getByRole("button", { name: /Download POC-bestand · JWLibrary-Merged-.*\.jwlibrary/ });
+  await expect(downloadButton).toBeEnabled();
+  const downloadPromise = page.waitForEvent("download");
+  await downloadButton.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^JWLibrary-Merged-\d{4}-\d{2}-\d{2}\.jwlibrary$/);
+  const inspected = await inspectDownloadedJwLibrary(download);
+  expect(inspected.entryNames).toContain("manifest.json");
+  expect(inspected.entryNames).toContain(inspected.manifest.userDataBackup?.databaseName);
+  expect(await selectedSourceDigests(page)).toEqual(sourceDigestsBefore);
+  await expect(page.getByText(/Download gestart: JWLibrary-Merged-/)).toBeVisible();
+  expect(requestBodies).toEqual([]);
+});
+
+test("builds and downloads a resolved Advanced-mode POC .jwlibrary", async ({ page }) => {
+  const requestBodies: string[] = [];
+  page.on("request", (request) => {
+    const body = request.postData();
+    if (body) requestBodies.push(body);
+  });
+  await page.goto("#library-merger");
+  await page.getByRole("radio", { name: "Geavanceerd" }).check();
+  await page.getByLabel("Kies .jwlibrary-bestand A", { exact: true }).setInputFiles(fixture("empty-a.jwlibrary"));
+  await page.getByLabel("Kies .jwlibrary-bestand B", { exact: true }).setInputFiles(fixture("empty-b.jwlibrary"));
+  await page.getByRole("button", { name: "Vergelijk wijzigingen" }).click();
+
+  await expect(page.getByRole("heading", { name: "Driewegvergelijking" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Besluiten afronden" })).toBeEnabled();
+  await expect(page.getByRole("region", { name: "Voorlopig informatieverlies" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Naar bestand maken" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Besluiten afronden" }).click();
+  await expect(page.getByText(/De keuzes zijn veilig vertaald naar een databaseplan/)).toBeVisible();
+  const sourceDigestsBefore = await selectedSourceDigests(page);
+  await expect(page.getByRole("button", { name: "Naar bestand maken" })).toBeEnabled();
+  await page.getByRole("button", { name: "Naar bestand maken" }).click();
+  await page.getByRole("button", { name: "Bestand maken en controleren" }).click();
+
+  const pocNotice = page.getByRole("note", { name: "POC-waarschuwing" });
+  await expect(pocNotice).toBeVisible();
+  await expect(pocNotice).toContainText(/hash is voorlopig overgenomen uit bron A/i);
+  const downloadButton = page.getByRole("button", { name: /Download POC-bestand · JWLibrary-Merged-.*\.jwlibrary/ });
+  await expect(downloadButton).toBeEnabled();
+  const downloadPromise = page.waitForEvent("download");
+  await downloadButton.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^JWLibrary-Merged-\d{4}-\d{2}-\d{2}\.jwlibrary$/);
+  const inspected = await inspectDownloadedJwLibrary(download);
+  expect(inspected.entryNames).toContain("manifest.json");
+  expect(inspected.entryNames).toContain(inspected.manifest.userDataBackup?.databaseName);
+  expect(await selectedSourceDigests(page)).toEqual(sourceDigestsBefore);
+  await expect(page.getByText(/Download gestart: JWLibrary-Merged-/)).toBeVisible();
   expect(requestBodies).toEqual([]);
 });
 

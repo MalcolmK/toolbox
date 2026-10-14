@@ -7,11 +7,13 @@
     "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "test": "vitest run",
+    "dev": "vite --configLoader native",
+    "build": "tsc --noEmit && vite build --configLoader native",
+    "preview": "vite preview --configLoader native",
+    "test": "vitest run --configLoader native --pool=threads",
     "test:e2e": "playwright test",
+    "test:e2e:edge": "playwright test --project=msedge",
+    "test:e2e:webkit": "playwright test --project=webkit",
     "fixtures:jw-library": "node tests/fixtures/jw-library/generate-fixtures.mjs"
   },
   "dependencies": {
