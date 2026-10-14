@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.16 — 2026-10-14
+
+- Moved the shared navigation toggle to the upper-left corner and into the open drawer, removing the separate drawer close button; animated its icon into a close symbol while respecting reduced-motion preferences.
+- Focused the active page heading after route changes and replaced the Toolbox title bar with live app search, a clear control, and an accessible empty-results message.
+- Removed the title bar from merger subpages and moved the return link to the upper-left area below the navigation toggle.
+- Changed Preview Merge to a semantic route link for native keyboard and browser navigation behavior.
+
 ## 0.1.15 — 2026-10-14
 
 - Updated the implementation plan to use the confirmed `/toolbox/` Pages path and clarified that GitHub Actions publishes a fresh build from `dist/`.

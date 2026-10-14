@@ -30,8 +30,9 @@
   transform: translateX(-110%);
 }
 
-.closeButton,
 .menuButton {
+  position: fixed;
+  z-index: 5;
   display: grid;
   flex: 0 0 auto;
   place-items: center;
@@ -42,9 +43,13 @@
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-secondary);
+  transition:
+    left var(--motion-duration-fast) var(--motion-easing-standard),
+    top var(--motion-duration-fast) var(--motion-easing-standard),
+    background var(--motion-duration-fast) var(--motion-easing-standard),
+    color var(--motion-duration-fast) var(--motion-easing-standard);
 }
 
-.closeButton svg,
 .menuButton svg {
   width: 1.75rem;
   height: 1.75rem;
@@ -55,7 +60,31 @@
   stroke-width: 1.7;
 }
 
-.closeButton:hover,
+.menuButton svg path {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    transform var(--motion-duration-fast) var(--motion-easing-standard),
+    opacity var(--motion-duration-fast) var(--motion-easing-standard);
+}
+
+.menuIconLineTop,
+.menuIconLineBottom {
+  transform: translateY(0) rotate(0);
+}
+
+.menuIconOpen .menuIconLineTop {
+  transform: translateY(5px) rotate(45deg);
+}
+
+.menuIconOpen .menuIconLineMiddle {
+  opacity: 0;
+}
+
+.menuIconOpen .menuIconLineBottom {
+  transform: translateY(-5px) rotate(-45deg);
+}
+
 .menuButton:hover {
   background: var(--color-accent-soft);
   color: var(--color-accent);
@@ -67,15 +96,25 @@
   color: var(--color-accent);
 }
 
-.closeButton:focus-visible,
 .menuButton:focus-visible,
 .themeButton:focus-visible,
 .toolNavigation:focus-visible,
 .toolboxNavigation:focus-visible,
 .primaryAction:focus-visible,
-.secondaryAction:focus-visible {
+.secondaryAction:focus-visible,
+.subpageBackLink:focus-visible {
   outline: var(--focus-outline-width) solid var(--color-focus-ring);
   outline-offset: var(--focus-outline-offset);
+}
+
+.menuButtonClosed {
+  top: 1rem;
+  left: 1rem;
+}
+
+.menuButtonOpen {
+  top: 1.25rem;
+  left: calc(clamp(17rem, 21.7vw, 22rem) - 4.25rem);
 }
 
 .toolNavigation {
@@ -249,12 +288,80 @@
   backdrop-filter: blur(1rem);
 }
 
-.headerDivider {
-  align-self: stretch;
-  width: 1px;
-  max-height: 2.25rem;
-  margin-block: auto;
-  background: var(--color-border-strong);
+.searchField {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.searchField > svg {
+  flex: 0 0 1.375rem;
+  width: 1.375rem;
+  height: 1.375rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.searchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: var(--space-2) 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.searchInput::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+.searchInput:focus-visible {
+  outline: var(--focus-outline-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-outline-offset);
+  border-radius: var(--radius-control);
+}
+
+.clearSearchButton {
+  display: grid;
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.clearSearchButton:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.clearSearchButton:focus-visible {
+  outline: var(--focus-outline-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-outline-offset);
+}
+
+.clearSearchButton svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .pageTitle {
@@ -287,6 +394,15 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.emptySearchState {
+  display: grid;
+  min-height: 10rem;
+  place-items: center;
+  margin: 0;
+  color: var(--color-text-secondary);
+  text-align: center;
 }
 
 .toolItem {
@@ -530,7 +646,8 @@
 }
 
 .primaryAction,
-.secondaryAction {
+.secondaryAction,
+.subpageBackLink {
   display: inline-flex;
   min-height: 3rem;
   align-items: center;
@@ -562,8 +679,19 @@
   color: var(--color-text-secondary);
 }
 
+.subpageBackLink {
+  position: fixed;
+  z-index: 1;
+  top: 4.75rem;
+  left: 1rem;
+  background: var(--color-surface-header);
+  -webkit-backdrop-filter: blur(1rem);
+  backdrop-filter: blur(1rem);
+}
+
 .primaryAction:hover,
-.secondaryAction:hover {
+.secondaryAction:hover,
+.subpageBackLink:hover {
   transform: translateY(-1px);
   border-color: var(--color-accent);
   background: var(--color-accent-soft);
@@ -571,12 +699,14 @@
 }
 
 .primaryAction:active,
-.secondaryAction:active {
+.secondaryAction:active,
+.subpageBackLink:active {
   transform: translateY(0);
 }
 
 .primaryAction svg,
-.secondaryAction svg {
+.secondaryAction svg,
+.subpageBackLink svg {
   width: 1.25rem;
   height: 1.25rem;
   fill: none;
@@ -728,6 +858,10 @@
     background-color: var(--color-surface-header-fallback);
   }
 
+  .subpageBackLink {
+    background-color: var(--color-surface-header-fallback);
+  }
+
   .workSurface {
     background-color: var(--color-surface-workspace-fallback);
   }
@@ -754,6 +888,10 @@
 
   .workSurface {
     min-height: 16rem;
+  }
+
+  .menuButtonOpen {
+    left: calc(min(86vw, 22rem) - 4.25rem);
   }
 }
 
@@ -803,6 +941,10 @@
   .workSurface {
     min-height: 13rem;
     border-radius: var(--radius-card);
+  }
+
+  .menuButtonOpen {
+    left: calc(min(88vw, 22rem) - 4.25rem);
   }
 
   .placeholderDialog {

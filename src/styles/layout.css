@@ -65,6 +65,11 @@
   margin-inline: auto;
 }
 
+.main-content--subpage {
+  gap: 0;
+  padding-top: clamp(10rem, 20vh, 14rem);
+}
+
 @media (max-width: 960px) {
   .main-content,
   .main-content--drawer-open,
@@ -72,6 +77,10 @@
     width: min(calc(100% - 2rem), 65rem);
     margin-inline: auto;
     padding-top: clamp(2rem, 8vh, 4rem);
+  }
+
+  .main-content--subpage {
+    padding-top: clamp(9rem, 16vh, 11rem);
   }
 }
 
@@ -81,5 +90,10 @@
   .main-content--drawer-closed {
     width: calc(100% - 2rem);
     gap: 2rem;
+  }
+
+  .main-content--subpage {
+    gap: 0;
+    padding-top: clamp(9rem, 18vh, 10rem);
   }
 }

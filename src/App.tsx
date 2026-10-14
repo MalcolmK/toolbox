@@ -13,18 +13,34 @@ function routeFromHash(): AppRoute {
   return "toolbox";
 }
 
-function MenuIcon() {
+function MenuToggleIcon({ open }: { open: boolean }) {
   return (
-    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path d="M4 6h15M4 12h11M4 18h15" />
+    <svg
+      className={open ? styles.menuIconOpen : styles.menuIconClosed}
+      aria-hidden="true"
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <path className={styles.menuIconLineTop} d="M5 7h14" />
+      <path className={styles.menuIconLineMiddle} d="M5 12h14" />
+      <path className={styles.menuIconLineBottom} d="M5 17h14" />
     </svg>
   );
 }
 
-function CloseIcon() {
+function SearchIcon() {
   return (
     <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path d="m5 5 14 14M19 5 5 19" />
+      <circle cx="10.8" cy="10.8" r="6.3" />
+      <path d="m15.5 15.5 4.2 4.2" />
+    </svg>
+  );
+}
+
+function ClearIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <path d="m6 6 12 12M18 6 6 18" />
     </svg>
   );
 }
@@ -112,16 +128,21 @@ function App() {
   const [navigationOpen, setNavigationOpen] = useState(() =>
     !window.matchMedia("(max-width: 960px)").matches,
   );
+  const [toolSearch, setToolSearch] = useState("");
   const [theme, setTheme] = useState<Theme>(() =>
     document.documentElement.dataset.theme === "light" ? "light" : "dark",
   );
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const pageTitleRef = useRef<HTMLHeadingElement>(null);
+  const toolSearchRef = useRef<HTMLInputElement>(null);
+  const routeHeadingRef = useRef<HTMLHeadingElement>(null);
   const placeholderDialogRef = useRef<HTMLDialogElement>(null);
   const previousOpenRef = useRef(navigationOpen);
   const previousRouteRef = useRef(route);
   const [placeholderDialogOpen, setPlaceholderDialogOpen] = useState(false);
+  const normalizedToolSearch = toolSearch.trim().toLowerCase();
+  const filteredToolboxEntries = toolboxEntries.filter((entry) =>
+    entry.name.toLowerCase().includes(normalizedToolSearch),
+  );
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 960px)");
@@ -153,14 +174,18 @@ function App() {
 
   useEffect(() => {
     if (previousOpenRef.current !== navigationOpen) {
-      (navigationOpen ? closeButtonRef.current : menuButtonRef.current)?.focus();
+      menuButtonRef.current?.focus();
       previousOpenRef.current = navigationOpen;
     }
   }, [navigationOpen]);
 
   useEffect(() => {
     if (previousRouteRef.current !== route) {
-      pageTitleRef.current?.focus({ preventScroll: true });
+      if (route === "toolbox") {
+        toolSearchRef.current?.focus({ preventScroll: true });
+      } else {
+        routeHeadingRef.current?.focus({ preventScroll: true });
+      }
       previousRouteRef.current = route;
     }
   }, [route]);
@@ -191,17 +216,23 @@ function App() {
   const isMergerRoute = route !== "toolbox";
 
   const keepFocusInDrawer = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (!isCompact || event.key !== "Tab") return;
+    if (!isCompact || !navigationOpen || event.key !== "Tab") return;
 
-    const focusable = event.currentTarget.querySelectorAll<HTMLElement>(
+    const drawer = event.currentTarget.querySelector<HTMLElement>("#primary-navigation");
+    if (!drawer || !menuButtonRef.current) return;
+
+    const drawerFocusable = drawer.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
     );
-    const first = focusable.item(0);
-    const last = focusable.item(focusable.length - 1);
+    const first = menuButtonRef.current;
+    const last = drawerFocusable.item(drawerFocusable.length - 1);
 
     if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last?.focus();
+    } else if (event.shiftKey && document.activeElement === drawerFocusable.item(0)) {
+      event.preventDefault();
+      first.focus();
     } else if (!event.shiftKey && document.activeElement === last) {
       event.preventDefault();
       first?.focus();
@@ -209,7 +240,7 @@ function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" onKeyDown={keepFocusInDrawer}>
       <div className="app-background" aria-hidden="true">
         <span className="app-orbit app-orbit--upper" />
         <span className="app-orbit app-orbit--lower" />
@@ -219,25 +250,25 @@ function App() {
         <div className={styles.mobileScrim} aria-hidden="true" onClick={closeNavigation} />
       )}
 
+      <button
+        ref={menuButtonRef}
+        className={`${styles.menuButton} ${navigationOpen ? styles.menuButtonOpen : styles.menuButtonClosed}`}
+        type="button"
+        aria-label={navigationOpen ? "Close navigation" : "Open navigation"}
+        aria-controls="primary-navigation"
+        aria-expanded={navigationOpen}
+        onClick={() => setNavigationOpen((open) => !open)}
+      >
+        <MenuToggleIcon open={navigationOpen} />
+      </button>
+
       <aside
         id="primary-navigation"
         className={`${styles.drawer} ${navigationOpen ? styles.drawerOpen : styles.drawerClosed}`}
         aria-label="Primary navigation"
         aria-hidden={!navigationOpen}
-        aria-modal={isCompact ? true : undefined}
-        role={isCompact ? "dialog" : undefined}
         inert={!navigationOpen}
-        onKeyDown={keepFocusInDrawer}
       >
-        <button
-          ref={closeButtonRef}
-          className={styles.closeButton}
-          type="button"
-          aria-label="Close navigation"
-          onClick={closeNavigation}
-        >
-          <CloseIcon />
-        </button>
         <nav aria-label="Tools">
           {isMergerRoute && (
             <a
@@ -302,63 +333,99 @@ function App() {
 
       <main
         id={route === "toolbox" ? "toolbox" : route}
-        className={`main-content ${navigationOpen ? "main-content--drawer-open" : "main-content--drawer-closed"}`}
+        className={`main-content ${navigationOpen ? "main-content--drawer-open" : "main-content--drawer-closed"} ${route === "toolbox" ? "" : "main-content--subpage"}`}
         inert={navigationOpen && isCompact}
       >
-        <header className={styles.header}>
-          <button
-            ref={menuButtonRef}
-            className={styles.menuButton}
-            type="button"
-            aria-label={navigationOpen ? "Close navigation" : "Open navigation"}
-            aria-controls="primary-navigation"
-            aria-expanded={navigationOpen}
-            onClick={() => setNavigationOpen((open) => !open)}
-          >
-            <MenuIcon />
-          </button>
-          <span className={styles.headerDivider} aria-hidden="true" />
-          <h1 className={styles.pageTitle} ref={pageTitleRef} tabIndex={-1}>
-            {route === "toolbox" ? "Toolbox" : "JW Library Merger"}
-          </h1>
-        </header>
+        {route !== "toolbox" && !navigationOpen && (
+          <a className={styles.subpageBackLink} href="#toolbox" onClick={closeNavigation}>
+            <ArrowLeftIcon />
+            <span>Back to Toolbox</span>
+          </a>
+        )}
 
         {route === "toolbox" ? (
-          <section className={styles.workSurface} aria-label="Available tools">
-            <ul className={styles.toolList}>
-              {toolboxEntries.map((entry) => (
-                <li className={styles.toolItem} key={entry.id}>
-                  {entry.kind === "tool" ? (
-                    <a className={`${styles.toolCard} ${styles.toolCardCurrent}`} href={entry.href}>
-                      <span className={styles.toolCardIcon}>
-                        <BookIcon />
-                      </span>
-                      <span className={styles.toolCardLabel}>{entry.name}</span>
-                      <span className={styles.visuallyHidden}>Featured tool</span>
-                    </a>
-                  ) : (
-                    <button
-                      className={styles.toolCard}
-                      type="button"
-                      onClick={() => setPlaceholderDialogOpen(true)}
-                    >
-                      <span className={styles.toolCardIcon}>
-                        <PlusIcon />
-                      </span>
-                      <span className={styles.toolCardLabel}>{entry.name}</span>
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
+          <>
+            <header className={styles.header}>
+              <h1 className={styles.visuallyHidden}>Toolbox</h1>
+              <label className={styles.searchField}>
+                <SearchIcon />
+                <span className={styles.visuallyHidden}>Search apps</span>
+                <input
+                  ref={toolSearchRef}
+                  className={styles.searchInput}
+                  type="text"
+                  inputMode="search"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Search apps…"
+                  value={toolSearch}
+                  onChange={(event) => setToolSearch(event.currentTarget.value)}
+                />
+                {toolSearch.length > 0 && (
+                  <button
+                    className={styles.clearSearchButton}
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => {
+                      setToolSearch("");
+                      toolSearchRef.current?.focus();
+                    }}
+                  >
+                    <ClearIcon />
+                  </button>
+                )}
+              </label>
+            </header>
+
+            <section className={styles.workSurface} aria-label="Available tools">
+              {filteredToolboxEntries.length > 0 ? (
+                <ul className={styles.toolList}>
+                  {filteredToolboxEntries.map((entry) => (
+                    <li className={styles.toolItem} key={entry.id}>
+                      {entry.kind === "tool" ? (
+                        <a className={`${styles.toolCard} ${styles.toolCardCurrent}`} href={entry.href}>
+                          <span className={styles.toolCardIcon}>
+                            <BookIcon />
+                          </span>
+                          <span className={styles.toolCardLabel}>{entry.name}</span>
+                          <span className={styles.visuallyHidden}>Featured tool</span>
+                        </a>
+                      ) : (
+                        <button
+                          className={styles.toolCard}
+                          type="button"
+                          onClick={() => setPlaceholderDialogOpen(true)}
+                        >
+                          <span className={styles.toolCardIcon}>
+                            <PlusIcon />
+                          </span>
+                          <span className={styles.toolCardLabel}>{entry.name}</span>
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={styles.emptySearchState} role="status">
+                  No apps found.
+                </p>
+              )}
+            </section>
+          </>
         ) : route === "library-merger" ? (
           <section
             className={`${styles.workSurface} ${styles.workflowSurface}`}
             aria-labelledby="workflow-heading"
           >
             <div className={styles.workflowHeading}>
-              <h2 className={styles.sectionTitle} id="workflow-heading">Source libraries</h2>
+              <h1
+                className={styles.sectionTitle}
+                id="workflow-heading"
+                ref={route === "library-merger" ? routeHeadingRef : undefined}
+                tabIndex={-1}
+              >
+                Source libraries
+              </h1>
               <p className={styles.sectionIntro}>Review the two sample sources before opening the preview.</p>
             </div>
             <div className={styles.sourcePair} role="group" aria-label="Sample source libraries">
@@ -367,19 +434,12 @@ function App() {
               <SourceLibraryPanel letter="B" />
             </div>
             <div className={styles.workflowActions}>
-              <button
+              <a
                 className={styles.primaryAction}
-                type="button"
-                onClick={() => {
-                  closeNavigation();
-                  window.location.hash = "merge-preview";
-                }}
+                href="#merge-preview"
+                onClick={closeNavigation}
               >
                 Preview Merge
-              </button>
-              <a className={styles.secondaryAction} href="#toolbox" onClick={closeNavigation}>
-                <ArrowLeftIcon />
-                <span>Back to Toolbox</span>
               </a>
             </div>
             <p className={styles.prototypeNote}>Design prototype. Sample content only; no files are selected or processed.</p>
@@ -394,7 +454,14 @@ function App() {
               <span>Sample content only. No files have been processed.</span>
             </div>
             <div className={styles.workflowHeading}>
-              <h2 className={styles.sectionTitle} id="preview-heading">Merge preview</h2>
+              <h1
+                className={styles.sectionTitle}
+                id="preview-heading"
+                ref={route === "merge-preview" ? routeHeadingRef : undefined}
+                tabIndex={-1}
+              >
+                Merge preview
+              </h1>
               <p className={styles.sectionIntro}>Illustrative view of a combined library.</p>
             </div>
             <div
@@ -418,10 +485,6 @@ function App() {
               <a className={styles.primaryAction} href="#library-merger" onClick={closeNavigation}>
                 <ArrowLeftIcon />
                 <span>Back to edit</span>
-              </a>
-              <a className={styles.secondaryAction} href="#toolbox" onClick={closeNavigation}>
-                <ToolboxIcon />
-                <span>Return to Toolbox</span>
               </a>
             </div>
           </section>
