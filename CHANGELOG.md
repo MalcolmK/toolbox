@@ -2,7 +2,11 @@
 
 ## 0.3.0 — 2026-10-15
 
-- Updated the Simple Mode policy and unit expectations: `possible-conflict` content always requires an explicit per-publication A/B choice, while timestamp fallback tests now cover only automatically resolvable `changed` rows. Documented that a publication choice cannot resolve uncertain `Location` identities or relationships. Reverified the current unit, build, and full browser suites for this 0.3.0 change round.
+- Assessed Step 7: a safe populated conflict download cannot yet be produced because `Location` composite keys remain candidate identities. Documented that synthetic key equality is not proof of cross-backup equivalence, retained the e2e fail-closed check, and made a validated location-resolution decision the prerequisite for populated output and JW Library restore testing. Rechecked 115 unit tests, the production build, and all 27 browser runs; all passed. Kept the release at 0.3.0.
+
+- Updated the Simple Mode policy and unit expectations: `possible-conflict` content always requires an explicit per-publication A/B choice, while timestamp fallback tests now cover only automatically resolvable `changed` rows. Fixed the mobile navigation close button position found by WebKit. Documented that a publication choice cannot resolve uncertain `Location` identities or relationships. Verified 115 unit tests, the production build, and all 27 browser runs across Chromium, Microsoft Edge, and WebKit; kept the release at 0.3.0.
+- Audited the seven previously failing Simple Mode scenarios against fixture identities and merge rules. Kept conflicting note content on explicit review and kept uncertain `Location` identities blocked. Recorded the source of a separately preserved `Created` field after a manual A/B choice and added a regression assertion for that provenance.
+- Re-ran the complete checks after the audit: 115 unit tests passed, the production build passed, and all 27 Playwright runs passed across Chromium, Microsoft Edge, and WebKit. No version bump; the work remains under 0.3.0.
 
 - Simplified the visible merger into a three-step Simple Mode flow, added A/B choices for eligible conflicts grouped by publication, hid Advanced Mode from the interface while retaining its implementation, and moved technical comparison details behind optional disclosures.
 - Clarified when an unresolved plan cannot produce a file and kept the POC download visibly separate from a JW Library-verified backup.

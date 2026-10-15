@@ -243,7 +243,7 @@ describe("simpleMerge", () => {
 
       expect(note?.selected?.source).toBe("B");
       expect(note?.selected?.row.Created).toBe("2026-10-01T09:00:00Z");
-      expect(note?.selected?.fieldSources).toBeUndefined();
+      expect(note?.selected?.fieldSources).toEqual({ Created: "A" });
       expect(result.report.informationLoss).toEqual(expect.arrayContaining([
         expect.objectContaining({
           field: "Created",

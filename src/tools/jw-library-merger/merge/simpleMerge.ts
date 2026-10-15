@@ -372,6 +372,9 @@ export function simpleMerge(
         const selectedCandidate = {
           ...(reviewChoice === "A" ? sourceA : sourceB),
           row: selectedRow,
+          ...(selectedRow.Created !== (reviewChoice === "A" ? sourceA.row.Created : sourceB.row.Created)
+            ? { fieldSources: { Created: selectedRow.Created === sourceA.row.Created ? "A" as const : "B" as const } }
+            : {}),
         };
         const reason = `Je hebt voor deze publicatie back-up ${reviewChoice} gekozen.`;
         records.push({
