@@ -5,6 +5,7 @@ import { readJwLibrary } from "../../../src/tools/jw-library-merger/archive/read
 import { readUserData } from "../../../src/tools/jw-library-merger/database/readUserData";
 import { validateUserData } from "../../../src/tools/jw-library-merger/database/validateUserData";
 import { compareLibraries } from "../../../src/tools/jw-library-merger/compare/compareLibraries";
+import { confirmLocationProposal, createLocationResolutionContext } from "../../../src/tools/jw-library-merger/merge/locationResolution";
 
 const fixtureUrl = (name: string) => new URL(`../../fixtures/jw-library/${name}`, import.meta.url);
 const sqliteWasm = new URL("../../../node_modules/sql.js/dist/sql-wasm.wasm", import.meta.url);
@@ -38,6 +39,29 @@ describe("compareLibraries", () => {
       expect(comparison.summary.changedRecordCount).toBe(0);
       expect(comparison.sourceA.timestamps.notes[0]?.lastModified.sourceText)
         .toBe("2026-10-10T10:00:00Z");
+    } finally {
+      a.close();
+      b.close();
+    }
+  });
+
+  it("uses confirmed locations to match dependent rows across different local IDs", async () => {
+    const a = await readSnapshot("identical-a.jwlibrary");
+    const b = await readSnapshot("identical-b.jwlibrary");
+    try {
+      const context = createLocationResolutionContext("logical-identity", "different-local-ids",
+        a.snapshot, b.snapshot);
+      expect(context.proposals).toHaveLength(1);
+      const result = confirmLocationProposal(context, context.proposals[0]!.id, "logical-identity", 0,
+        a.snapshot, b.snapshot, "A");
+      if (!result.ok) throw new Error(result.reason);
+      const comparison = compareLibraries(a.snapshot, b.snapshot, result.context);
+      for (const tableName of ["Note", "UserMark", "BlockRange", "Bookmark", "InputField", "TagMap"]) {
+        expect(comparison.records.find((record) => record.tableName === tableName)?.status)
+          .toBe("equal");
+      }
+      expect(comparison.records.find((record) => record.tableName === "Note")?.relationshipDifferences)
+        .toEqual([]);
     } finally {
       a.close();
       b.close();
@@ -92,7 +116,7 @@ describe("compareLibraries", () => {
       expect(markComparison.records.filter((record) => record.tableName === "BlockRange"))
         .toHaveLength(4);
       expect(markComparison.records.filter((record) => record.tableName === "BlockRange"
-        && record.status === "uncertain-linked")).toHaveLength(4);
+        && record.status === "only-in-b")).toHaveLength(3);
       expect(markComparison.records.filter((record) => record.tableName === "InputField"
         && record.status === "uncertain-linked")).toHaveLength(3);
     } finally {

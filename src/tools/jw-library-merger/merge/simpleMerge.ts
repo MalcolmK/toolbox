@@ -2,6 +2,8 @@ import type { SqlValue } from "sql.js";
 import type { UserDataRow, UserDataSnapshot } from "../database/readUserData";
 import { compareLibraries, type ComparedRecord, type ComparisonStatus } from "../compare/compareLibraries";
 import { normalizeTimestamp, type NormalizedTimestamp } from "../compare/normalizeTimestamp";
+import type { LocationResolutionContext } from "./locationResolution";
+import type { PlaylistResolutionContext } from "./playlistResolution";
 
 export type MergeSource = "A" | "B";
 export type MergeConfidence = "identical" | "record-timestamp" | "database-timestamp" | "manifest-timestamp" | "manual-choice" | "unresolved";
@@ -24,6 +26,8 @@ export interface SimpleMergeRecord {
   readonly action: "keep-one" | "omit" | "keep-both-pending-review" | "needs-review";
   readonly selected: MergeRowCandidate | null;
   readonly retainedAlternatives: readonly MergeRowCandidate[];
+  /** Exact cross-source row aliases proven equal or explicitly confirmed by a resolution context. */
+  readonly sourceAliases?: readonly MergeRowCandidate[];
   readonly confidence: MergeConfidence;
   readonly rule: string;
 }
@@ -278,11 +282,17 @@ function fieldLosses(
       tableName: record.tableName,
       identityKey: record.identityKey,
       field: difference.field,
-      valueNotRetained: undefined,
+      valueNotRetained: difference.targetTable === "BlockRange"
+        ? winner === "A" ? difference.rangeCountB : difference.rangeCountA
+        : undefined,
       omittedFrom: winner === "A" ? "B" : "A",
-      retainedValue: undefined,
+      retainedValue: difference.targetTable === "BlockRange"
+        ? winner === "A" ? difference.rangeCountA : difference.rangeCountB
+        : undefined,
       retainedFrom: winner,
-      reason: `${reason} De andere gekoppelde ${tableLabels[difference.targetTable] ?? difference.targetTable}-identiteit wordt niet behouden.`,
+      reason: difference.targetTable === "BlockRange"
+        ? `${reason} De volledige bereikset uit de andere bron (${winner === "A" ? difference.rangeCountB : difference.rangeCountA} bereiken) wordt niet behouden.`
+        : `${reason} De andere gekoppelde ${tableLabels[difference.targetTable] ?? difference.targetTable}-identiteit wordt niet behouden.`,
       relationshipTargetTable: difference.targetTable,
       relationshipIdentityNotRetained: winner === "A"
         ? difference.identityKeyB
@@ -303,19 +313,76 @@ export function simpleMerge(
   snapshotA: UserDataSnapshot,
   snapshotB: UserDataSnapshot,
   reviewChoices: ReadonlyMap<string, MergeSource> = new Map(),
+  locationResolution?: LocationResolutionContext,
+  playlistResolution?: PlaylistResolutionContext,
 ): SimpleMergeResult {
   const pair: SnapshotPair = { A: snapshotA, B: snapshotB };
-  const comparison = compareLibraries(snapshotA, snapshotB);
+  const comparison = compareLibraries(snapshotA, snapshotB, locationResolution, playlistResolution);
   const recency = sourceRecency(pair);
   const records: SimpleMergeRecord[] = [];
   const choices: SimpleMergeChoice[] = [];
   const informationLoss: SimpleMergeInformationLoss[] = [];
   const unresolved: SimpleMergeReport["unresolved"][number][] = [];
   const decisionWarnings: string[] = [];
+  const rangeSetWinners = new Map<string, MergeSource>();
+  for (const mark of comparison.records) {
+    if (mark.tableName !== "UserMark" || !mark.identityKey
+      || !mark.relationshipDifferences.some((item) => item.field === "BlockRanges" && item.status === "changed")) continue;
+    const winner = reviewChoices.get(`UserMark:${mark.identityKey}`);
+    if (winner) {
+      const guid = (winner === "A" ? mark.sourceA : mark.sourceB)?.row.UserMarkGuid;
+      if (typeof guid === "string") rangeSetWinners.set(guid, winner);
+    }
+  }
 
   for (const compared of comparison.records) {
     const sourceA = candidate(compared, "A", snapshotA);
     const sourceB = candidate(compared, "B", snapshotB);
+    if (compared.tableName === "BlockRange" && (sourceA || sourceB)) {
+      const range = sourceA ?? sourceB!;
+      const sourceSnapshot = range.source === "A" ? snapshotA : snapshotB;
+      const mark = sourceSnapshot.tables.UserMark?.rows.find((row) => row.UserMarkId === range.row.UserMarkId);
+      const markGuid = typeof mark?.UserMarkGuid === "string" ? mark.UserMarkGuid : null;
+      const winner = markGuid ? rangeSetWinners.get(markGuid) : undefined;
+      if (winner && range.source !== winner && (!sourceA || !sourceB)) {
+        const reason = `De gekozen versie ${winner} van de markering behoudt haar volledige bereikset; dit bereik uit bron ${range.source} wordt daarom weggelaten.`;
+        const rangeValue = JSON.stringify([range.row.BlockType, range.row.Identifier, range.row.StartToken, range.row.EndToken]);
+        records.push({
+          tableName: compared.tableName, identityKey: compared.identityKey,
+          identityStatus: compared.identityStatus, comparisonStatus: compared.status,
+          action: "omit", selected: null, retainedAlternatives: [range],
+          confidence: "manual-choice", rule: reason,
+        });
+        choices.push({ tableName: compared.tableName, identityKey: compared.identityKey,
+          selectedSource: winner, confidence: "manual-choice", reason });
+        informationLoss.push({
+          kind: "relationship", tableName: "BlockRange", identityKey: compared.identityKey,
+          field: "Range", valueNotRetained: rangeValue, omittedFrom: range.source,
+          retainedValue: undefined, retainedFrom: winner, relationshipTargetTable: "UserMark",
+          relationshipIdentityNotRetained: markGuid, relationshipIdentityRetained: markGuid, reason,
+        });
+        continue;
+      }
+    }
+    const locationGroup = compared.tableName === "Location"
+      ? locationResolution?.confirmedGroups.find((group) => group.logicalIdentity === compared.identityKey)
+      : undefined;
+
+    if (locationGroup && sourceA && sourceB && compared.fieldDifferences.length > 0) {
+      const selectedSource = locationGroup.displayMetadataSource;
+      const selected = selectedSource === "A" ? sourceA : sourceB;
+      const reason = `Weergavemetadata van plaats ${compared.identityKey} komt uit back-up ${selectedSource}.`;
+      records.push({
+        tableName: compared.tableName, identityKey: compared.identityKey, identityStatus: compared.identityStatus,
+        comparisonStatus: compared.status, action: "keep-one", selected, retainedAlternatives: [],
+        sourceAliases: [selectedSource === "A" ? sourceB : sourceA],
+        confidence: "manual-choice", rule: reason,
+      });
+      choices.push({ tableName: compared.tableName, identityKey: compared.identityKey,
+        selectedSource, confidence: "manual-choice", reason });
+      informationLoss.push(...fieldLosses(compared, selectedSource, selected.row, reason));
+      continue;
+    }
 
     if (compared.status === "equal" && sourceA) {
       records.push({
@@ -326,6 +393,7 @@ export function simpleMerge(
         action: "keep-one",
         selected: sourceA,
         retainedAlternatives: [],
+        ...(sourceB && compared.identityStatus === "stable" ? { sourceAliases: [sourceB] } : {}),
         confidence: "identical",
         rule: "De rijen zijn gelijk en hebben een stabiele identiteit; één exemplaar wordt behouden.",
       });
@@ -385,6 +453,7 @@ export function simpleMerge(
           action: "keep-one",
           selected: selectedCandidate,
           retainedAlternatives: [],
+          ...(compared.identityStatus === "stable" ? { sourceAliases: [reviewChoice === "A" ? sourceB : sourceA] } : {}),
           confidence: "manual-choice",
           rule: reason,
         });
@@ -453,6 +522,7 @@ export function simpleMerge(
           action: "keep-one",
           selected: selectedCandidate,
           retainedAlternatives: [],
+          ...(compared.identityStatus === "stable" ? { sourceAliases: [selectedSource === "A" ? sourceB : sourceA] } : {}),
           confidence,
           rule: reason,
         });

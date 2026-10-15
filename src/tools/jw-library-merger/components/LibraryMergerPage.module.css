@@ -457,7 +457,69 @@
 .selectedDecision { min-height: 3rem; padding: var(--space-2) var(--space-4); border: 2px solid var(--color-accent); border-radius: var(--radius-control); background: var(--color-accent-soft); color: var(--color-text-primary); font: inherit; font-weight: 650; cursor: pointer; }
 .selectedDecision:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
 .conflictActions .actionButton, .conflictActions .selectedDecision { min-height: 2.75rem; }
+.locationReview { display: grid; gap: var(--space-3); }
+.locationReview > div > h3, .locationReview > div > p { margin: 0; }
+.locationReview > div > p { margin-top: var(--space-1); }
+.locationCard { display: grid; min-width: 0; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-border-strong); border-radius: var(--radius-card); background: var(--color-surface-card); }
+.locationCardHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.locationCardHeading h4, .locationCardHeading p { margin: 0; }
+.locationCardHeading h4 { color: var(--color-text-primary); }
+.locationCardHeading p, .locationCard > p, .locationPair p { color: var(--color-text-secondary); font-size: var(--font-size-caption); line-height: var(--line-height-body); overflow-wrap: anywhere; }
+.locationCardHeading p { margin-top: var(--space-1); }
+.locationMetadataChoice { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-control); color: var(--color-text-primary); }
+.locationMetadataChoice > p { margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-caption); overflow-wrap: anywhere; }
+.locationRadioGroup { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.locationRadioGroup label { display: flex; min-height: 2.75rem; align-items: center; gap: var(--space-2); color: var(--color-text-primary); }
+.locationRadioGroup input { accent-color: var(--color-accent); }
+.locationRadioGroup input:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+.locationPairs { display: grid; gap: var(--space-3); }
+.locationPairs > summary, .locationUnresolved > summary { min-height: 2.75rem; align-content: center; color: var(--color-text-primary); font-weight: 600; cursor: pointer; }
+.locationPairs > summary:focus-visible, .locationUnresolved > summary:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+.locationPair { display: grid; min-width: 0; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-control); }
+.locationPair h5 { margin: 0; color: var(--color-text-primary); }
+.locationPairSources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.locationSource { min-width: 0; padding: var(--space-2); border-radius: var(--radius-control); background: var(--color-surface-workspace); overflow-wrap: anywhere; }
+.locationSource strong { color: var(--color-text-primary); }
+.locationSource p { margin: var(--space-1) 0 0; }
+.locationFields { display: grid; gap: var(--space-1); margin: 0; }
+.locationFields > div { display: grid; min-width: 0; grid-template-columns: minmax(7rem, 0.7fr) repeat(2, minmax(0, 1fr)); gap: var(--space-2); padding: var(--space-1) 0; border-bottom: 1px solid var(--color-border-subtle); }
+.locationFields dt { color: var(--color-text-primary); font-weight: 600; overflow-wrap: anywhere; }
+.locationFields dd { min-width: 0; margin: 0; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.locationFields dd span { display: none; }
+.locationFields .locationFieldDifference { color: var(--color-danger, var(--color-text-primary)); font-weight: 700; }
+.locationBlocker { padding: var(--space-3); border-radius: var(--radius-control); background: var(--color-surface-selected); color: var(--color-text-primary); }
+.locationActions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.locationActions > button { min-height: 2.75rem; }
+.locationActions > button:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+.locationActions > button:disabled { cursor: not-allowed; opacity: 0.55; }
+.locationUnresolved { padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-control); }
+.locationUnresolved ul { display: grid; max-height: 22rem; gap: var(--space-2); overflow: auto; padding-left: 1.25rem; }
+.locationUnresolved li { overflow-wrap: anywhere; }
+.locationUnresolved li strong { color: var(--color-text-primary); }
+.locationUnresolved li p { margin: var(--space-1) 0; color: var(--color-text-secondary); font-size: var(--font-size-caption); }
 .choiceStatus { padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); background: var(--color-surface-selected); }
+.playlistReview { display: grid; gap: var(--space-3); }
+.playlistReview > div:first-child h3, .playlistReview > div:first-child p { margin: 0; }
+.playlistReview > div:first-child p { margin-top: var(--space-1); color: var(--color-text-secondary); font-size: var(--font-size-caption); }
+.playlistCard, .playlistUnresolved { display: grid; min-width: 0; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-border-strong); border-radius: var(--radius-card); background: var(--color-surface-card); }
+.playlistCard > h4, .playlistUnresolved > h4, .playlistUnresolved > p { margin: 0; }
+.playlistSources { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.playlistSource { display: grid; align-content: start; min-width: 0; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-control); background: var(--color-surface-workspace); overflow-wrap: anywhere; }
+.playlistSource h5, .playlistSource p { margin: 0; }
+.playlistSource > summary { min-height: 2.75rem; align-content: center; color: var(--color-text-primary); font-weight: 600; cursor: pointer; }
+.playlistSource > summary:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+.playlistSource h5 { color: var(--color-text-primary); }
+.playlistSource dl { display: grid; gap: var(--space-1); margin: 0; }
+.playlistSource dl > div { display: grid; grid-template-columns: minmax(6rem, 0.7fr) minmax(0, 1fr); gap: var(--space-2); }
+.playlistSource dt { color: var(--color-text-primary); font-weight: 600; }
+.playlistSource dd { min-width: 0; margin: 0; color: var(--color-text-secondary); }
+.playlistSource p { display: grid; gap: var(--space-1); color: var(--color-text-secondary); font-size: var(--font-size-caption); }
+.playlistSource p strong { color: var(--color-text-primary); }
+.playlistUnresolved { border-color: var(--color-danger, var(--color-border-strong)); }
+.playlistUnresolved > p, .playlistUnresolved article > p { color: var(--color-text-secondary); font-size: var(--font-size-caption); }
+.playlistUnresolved article { display: grid; gap: var(--space-2); min-width: 0; padding: var(--space-3) 0; border-top: 1px solid var(--color-border-subtle); }
+.playlistUnresolved article h5, .playlistUnresolved article p { margin: 0; }
+.playlistReview button:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
 .noteTextReview { display: grid; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border-subtle); }
 .noteTextHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .noteTextHeading h5, .noteTextHeading p { margin: 0; }
@@ -499,6 +561,16 @@
   .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .resultsHeading { align-items: flex-start; flex-direction: column; }
   .conflictSources { grid-template-columns: minmax(0, 1fr); }
+  .locationCardHeading { align-items: flex-start; flex-direction: column; }
+  .locationPairSources { grid-template-columns: minmax(0, 1fr); }
+  .playlistSources { grid-template-columns: minmax(0, 1fr); }
+  .playlistCard, .playlistUnresolved { padding: var(--space-3); }
+  .playlistSource dl > div { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .locationFields > div { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .locationFields dd { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: var(--space-2); }
+  .locationFields dd span { display: inline; font-weight: 600; }
+  .locationActions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .locationActions > button { width: 100%; }
   .reviewTitle { align-items: flex-start; flex-direction: column; }
   .noteTextHeading { align-items: flex-start; flex-direction: column; }
   .textCandidateGrid { grid-template-columns: minmax(0, 1fr); }

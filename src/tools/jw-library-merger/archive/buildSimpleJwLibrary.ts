@@ -27,6 +27,8 @@ export async function buildSimpleJwLibrary(
       validatedB,
       preview.sources[1].snapshot,
       preview.mergePlan,
+      undefined,
+      preview.locationResolution,
     );
     const manifest = buildManifest({
       databaseBytes: database.bytes,

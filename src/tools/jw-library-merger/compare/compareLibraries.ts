@@ -4,16 +4,15 @@ import type {
   UserDataSnapshot,
   UserDataTable,
 } from "../database/readUserData";
-import {
-  identifyRecord,
-  type RecordIdentity,
-  type RecordIdentityStatus,
-} from "./recordIdentity";
+import type { RecordIdentity, RecordIdentityStatus } from "./recordIdentity";
+import { blockRangeSet, identifyLogicalRecord } from "./logicalRecordIdentity";
 import {
   normalizeTimestamp,
   normalizeUserDataTimestamps,
   type UserDataTimestampSummary,
 } from "./normalizeTimestamp";
+import { isLocationResolutionContextCurrent, type LocationResolutionContext, type LocationSource } from "../merge/locationResolution";
+import { isPlaylistResolutionContextCurrent, type PlaylistResolutionContext } from "../merge/playlistResolution";
 
 export type ComparisonStatus =
   | "equal"
@@ -44,6 +43,8 @@ export interface RelationshipDifference {
   readonly sourceLocalValueA: SqlValue | undefined;
   readonly sourceLocalValueB: SqlValue | undefined;
   readonly reason: string | null;
+  readonly rangeCountA?: number;
+  readonly rangeCountB?: number;
 }
 
 export interface ComparedSourceRecord {
@@ -139,15 +140,19 @@ const primaryConflictFields: Readonly<Record<string, readonly string[]>> = {
   Note: ["Title", "Content", "Created"],
   UserMark: ["ColorIndex", "StyleIndex", "Version"],
   Bookmark: ["Title", "Snippet", "BlockType", "BlockIdentifier"],
+  InputField: ["Value"],
+  TagMap: ["Position"],
   PlaylistItem: ["Label", "StartTrimOffsetTicks", "EndTrimOffsetTicks", "Accuracy", "EndAction"],
 };
 
-function identityRows(snapshot: UserDataSnapshot, tableName: string): IndexedRow[] {
+function identityRows(snapshot: UserDataSnapshot, otherSnapshot: UserDataSnapshot, tableName: string, source: LocationSource, context?: LocationResolutionContext, playlistContext?: PlaylistResolutionContext): IndexedRow[] {
   const table = snapshot.tables[tableName];
   if (!table) return [];
   return table.rows.map((row, index) => ({
     row,
-    identity: identifyRecord(snapshot, tableName, row, index),
+    identity: (() => {
+      return identifyLogicalRecord(snapshot, otherSnapshot, tableName, row, index, source, context, playlistContext);
+    })(),
   }));
 }
 
@@ -226,11 +231,15 @@ function compareFields(
 function resolveRelationship(
   indexes: RelationshipIndexes,
   snapshot: UserDataSnapshot,
+  otherSnapshot: UserDataSnapshot,
   tableName: string,
   row: UserDataRow | null,
   fromColumn: string,
   targetTable: string,
   targetColumn: string | null,
+  source: LocationSource,
+  context?: LocationResolutionContext,
+  playlistContext?: PlaylistResolutionContext,
 ): RelationshipTarget {
   if (!row) return { presence: "none", identityKey: null, identityStatus: null, reason: null };
   const sourceValue = row[fromColumn];
@@ -266,7 +275,8 @@ function resolveRelationship(
     };
   }
 
-  const targetIdentity = identifyRecord(snapshot, targetTable, targetRecord.row, targetRecord.index);
+  const targetIdentity = identifyLogicalRecord(snapshot, otherSnapshot, targetTable, targetRecord.row,
+    targetRecord.index, source, context, playlistContext);
   if (targetIdentity.key === null || targetIdentity.status === "uncertain") {
     return {
       presence: "unresolved",
@@ -293,6 +303,8 @@ function compareRelationships(
   tableB: UserDataTable | undefined,
   rowA: UserDataRow | null,
   rowB: UserDataRow | null,
+  context?: LocationResolutionContext,
+  playlistContext?: PlaylistResolutionContext,
 ): RelationshipDifference[] {
   const references = new Map<string, { tableName: string; fromColumn: string; toColumn: string | null }>();
   for (const foreignKey of [...(tableA?.foreignKeys ?? []), ...(tableB?.foreignKeys ?? [])]) {
@@ -306,10 +318,10 @@ function compareRelationships(
   const differences: RelationshipDifference[] = [];
   for (const reference of references.values()) {
     const targetA = resolveRelationship(
-      indexes, snapshotA, tableName, rowA, reference.fromColumn, reference.tableName, reference.toColumn,
+      indexes, snapshotA, snapshotB, tableName, rowA, reference.fromColumn, reference.tableName, reference.toColumn, "A", context, playlistContext,
     );
     const targetB = resolveRelationship(
-      indexes, snapshotB, tableName, rowB, reference.fromColumn, reference.tableName, reference.toColumn,
+    indexes, snapshotB, snapshotA, tableName, rowB, reference.fromColumn, reference.tableName, reference.toColumn, "B", context, playlistContext,
     );
     let status: RelationshipStatus;
     let reason: string | null = null;
@@ -414,13 +426,39 @@ function makePaired(
   tableName: string,
   entryA: IndexedRow,
   entryB: IndexedRow,
+  context?: LocationResolutionContext,
+  playlistContext?: PlaylistResolutionContext,
 ): ComparedRecord {
   const tableA = snapshotA.tables[tableName];
   const tableB = snapshotB.tables[tableName];
   const fieldDifferences = compareFields(tableName, tableA, tableB, entryA.row, entryB.row);
   const relationshipDifferences = compareRelationships(
-    indexes, snapshotA, snapshotB, tableName, tableA, tableB, entryA.row, entryB.row,
+    indexes, snapshotA, snapshotB, tableName, tableA, tableB, entryA.row, entryB.row, context, playlistContext,
   );
+  if (tableName === "UserMark") {
+    const rangesA = blockRangeSet(snapshotA, entryA.row.UserMarkId);
+    const rangesB = blockRangeSet(snapshotB, entryB.row.UserMarkId);
+    if (!rangesA || !rangesB || rangesA.duplicate || rangesB.duplicate) {
+      relationshipDifferences.push({
+        field: "BlockRanges", targetTable: "BlockRange", status: "uncertain",
+        identityKeyA: rangesA?.key ?? null, identityKeyB: rangesB?.key ?? null,
+        identityStatusA: rangesA && !rangesA.duplicate ? "stable" : "uncertain",
+        identityStatusB: rangesB && !rangesB.duplicate ? "stable" : "uncertain",
+        sourceLocalValueA: entryA.row.UserMarkId, sourceLocalValueB: entryB.row.UserMarkId,
+        reason: "De bereikset is niet volledig of bevat dubbele coördinaten; behoud wordt geblokkeerd.",
+        rangeCountA: rangesA?.count, rangeCountB: rangesB?.count,
+      });
+    } else if (rangesA.key !== rangesB.key) {
+      relationshipDifferences.push({
+        field: "BlockRanges", targetTable: "BlockRange", status: "changed",
+        identityKeyA: rangesA.key, identityKeyB: rangesB.key,
+        identityStatusA: "stable", identityStatusB: "stable",
+        sourceLocalValueA: entryA.row.UserMarkId, sourceLocalValueB: entryB.row.UserMarkId,
+        reason: "De volledige bereikset van deze markering verschilt; kies één bron voor de markering en haar bereiken.",
+        rangeCountA: rangesA.count, rangeCountB: rangesB.count,
+      });
+    }
+  }
   const uncertaintyReasons = relationshipDifferences
     .filter((difference) => difference.status === "uncertain")
     .map((difference) => difference.reason ?? `Relatie ${difference.field} is onzeker.`);
@@ -464,9 +502,11 @@ function compareTable(
   snapshotA: UserDataSnapshot,
   snapshotB: UserDataSnapshot,
   tableName: string,
+  context?: LocationResolutionContext,
+  playlistContext?: PlaylistResolutionContext,
 ): ComparedRecord[] {
-  const rowsA = identityRows(snapshotA, tableName);
-  const rowsB = identityRows(snapshotB, tableName);
+  const rowsA = identityRows(snapshotA, snapshotB, tableName, "A", context, playlistContext);
+  const rowsB = identityRows(snapshotB, snapshotA, tableName, "B", context, playlistContext);
   const stableA = rowsA.filter((row) => row.identity.status === "stable" && row.identity.key !== null);
   const stableB = rowsB.filter((row) => row.identity.status === "stable" && row.identity.key !== null);
   const candidateA = rowsA.filter((row) => row.identity.status === "candidate" && row.identity.key !== null);
@@ -481,7 +521,7 @@ function compareTable(
     const groupA = stableGroupsA.get(key) ?? [];
     const groupB = stableGroupsB.get(key) ?? [];
     if (groupA.length === 1 && groupB.length === 1) {
-      result.push(makePaired(indexes, snapshotA, snapshotB, tableName, groupA[0]!, groupB[0]!));
+      result.push(makePaired(indexes, snapshotA, snapshotB, tableName, groupA[0]!, groupB[0]!, context, playlistContext));
     } else if (groupA.length === 1 && groupB.length === 0) {
       result.push(makeOneSided(tableName, groupA[0]!, "A"));
     } else if (groupB.length === 1 && groupA.length === 0) {
@@ -500,7 +540,7 @@ function compareTable(
     const groupA = candidateGroupsA.get(key) ?? [];
     const groupB = candidateGroupsB.get(key) ?? [];
     if (groupA.length === 1 && groupB.length === 1) {
-      result.push(makePaired(indexes, snapshotA, snapshotB, tableName, groupA[0]!, groupB[0]!));
+      result.push(makePaired(indexes, snapshotA, snapshotB, tableName, groupA[0]!, groupB[0]!, context));
     } else {
       const duplicate = groupA.length > 1 || groupB.length > 1;
       for (const entry of groupA) result.push(makeUncertain(tableName, entry, null,
@@ -543,14 +583,23 @@ function sourceSummary(snapshot: UserDataSnapshot): ComparisonSourceSummary {
 export function compareLibraries(
   snapshotA: UserDataSnapshot,
   snapshotB: UserDataSnapshot,
+  locationResolution?: LocationResolutionContext,
+  playlistResolution?: PlaylistResolutionContext,
 ): LibraryComparison {
+  const activeLocationResolution = locationResolution
+    && isLocationResolutionContextCurrent(locationResolution, snapshotA, snapshotB)
+    ? locationResolution : undefined;
+  const activePlaylistResolution = playlistResolution && activeLocationResolution
+    && isPlaylistResolutionContextCurrent(playlistResolution, snapshotA, snapshotB,
+      playlistResolution.sourceLibraries.A, playlistResolution.sourceLibraries.B, activeLocationResolution)
+    ? playlistResolution : undefined;
   const tableNames = [...new Set([
     ...Object.keys(snapshotA.tables),
     ...Object.keys(snapshotB.tables),
   ])].sort();
   const relationshipIndexes: RelationshipIndexes = new WeakMap();
   const records = tableNames.flatMap((tableName) =>
-    compareTable(relationshipIndexes, snapshotA, snapshotB, tableName),
+    compareTable(relationshipIndexes, snapshotA, snapshotB, tableName, activeLocationResolution, activePlaylistResolution),
   );
   const countsByStatus = emptyCounts();
   const perTable: Record<string, Record<ComparisonStatus, number>> = {};

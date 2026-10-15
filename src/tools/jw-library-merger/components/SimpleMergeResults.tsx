@@ -2,6 +2,9 @@ import type { SqlValue } from "sql.js";
 import type { SimpleMergePreview } from "../merge/prepareSimpleMerge";
 import type { MergeRowCandidate, SimpleMergeReport } from "../merge/simpleMerge";
 import { getPublicationConflictGroups, type PublicationConflictGroup } from "../merge/publicationConflicts";
+import { LocationResolutionReview } from "./LocationResolutionReview";
+import { getLocationProposalGroups, type LocationProposalGroup } from "../merge/locationProposalGroups";
+import type { LocationSource } from "../merge/locationResolution";
 import styles from "./LibraryMergerPage.module.css";
 
 const tableLabels: Readonly<Record<string, string>> = {
@@ -55,11 +58,21 @@ function noteTitle(source: MergeRowCandidate | null): string | null {
 export function SimpleMergeResults({
   preview,
   reviewChoices,
+  locationMetadataChoices,
   onChoosePublicationVersion,
+  onChooseLocationMetadata,
+  onConfirmLocations,
+  onMarkLocationsDifferent,
+  onRevokeLocationConfirmation,
 }: {
   readonly preview: SimpleMergePreview;
   readonly reviewChoices: ReadonlyMap<string, "A" | "B">;
+  readonly locationMetadataChoices: ReadonlyMap<string, LocationSource>;
   readonly onChoosePublicationVersion: (group: PublicationConflictGroup, source: "A" | "B") => void;
+  readonly onChooseLocationMetadata: (group: LocationProposalGroup, source: LocationSource) => void;
+  readonly onConfirmLocations: (group: LocationProposalGroup, source: LocationSource) => void;
+  readonly onMarkLocationsDifferent: (group: LocationProposalGroup) => void;
+  readonly onRevokeLocationConfirmation: (group: LocationProposalGroup) => void;
 }) {
   const { differenceReport, mergePlan } = preview;
   const counts = differenceReport.summary;
@@ -68,17 +81,33 @@ export function SimpleMergeResults({
   const selectedA = mergePlan.report.choices.filter((choice) => choice.selectedSource === "A").length;
   const selectedB = mergePlan.report.choices.filter((choice) => choice.selectedSource === "B").length;
   const publicationConflicts = getPublicationConflictGroups(preview, reviewChoices);
+  const locationGroups = getLocationProposalGroups(preview);
+  const pendingLocationGroups = locationGroups.filter((group) => !group.confirmed && !group.canKeepSeparate).length;
+  const playlistContext = preview.playlistResolution;
+  const pendingPlaylistProposals = playlistContext.proposals.filter((proposal) =>
+    !playlistContext.confirmedGroups.some((group) => group.proposalId === proposal.id)
+    && !playlistContext.differentDecisions.some((decision) => decision.proposalId === proposal.id)).length;
+  const unresolvedPlaylists = playlistContext.unresolved.length;
   const unresolvedPublications = publicationConflicts.filter((group) => group.selectedSource === null).length;
   const publicationRecordKeys = new Set(publicationConflicts.flatMap((group) => group.recordKeys));
-  const otherOpenItems = unresolved.filter((item) =>
-    !item.identityKey || !publicationRecordKeys.has(`${item.tableName}:${item.identityKey}`)).length;
-  const statusLabel = mergePlan.status === "ready"
+  const playlistTables = new Set(["IndependentMedia", "PlaylistItem", "PlaylistItemAccuracy",
+    "PlaylistItemIndependentMediaMap", "PlaylistItemLocationMap", "PlaylistItemMarker",
+    "PlaylistItemMarkerBibleVerseMap", "PlaylistItemMarkerParagraphMap"]);
+  const otherOpenItems = preview.locationResolution.unresolved.length
+    + locationGroups.filter((group) => group.different && !group.canKeepSeparate).length
+    + unresolved.filter((item) => item.tableName !== "Location"
+      && !playlistTables.has(item.tableName)
+      && !(item.tableName === "TagMap" && ((item.sourceA?.row.PlaylistItemId !== null && item.sourceA?.row.PlaylistItemId !== undefined)
+        || (item.sourceB?.row.PlaylistItemId !== null && item.sourceB?.row.PlaylistItemId !== undefined)))
+      && (!item.identityKey || !publicationRecordKeys.has(`${item.tableName}:${item.identityKey}`))).length;
+  const allLocationGroupsResolved = pendingLocationGroups === 0
+    && preview.locationResolution.unresolved.length === 0
+    && locationGroups.every((group) => group.confirmed || group.canKeepSeparate);
+  const allPlaylistsResolved = pendingPlaylistProposals === 0 && unresolvedPlaylists === 0;
+  const fullyReady = mergePlan.status === "ready" && allLocationGroupsResolved && allPlaylistsResolved;
+  const statusLabel = fullyReady
     ? "Klaar om bestand te maken"
-    : unresolvedPublications > 0
-      ? `${unresolvedPublications} publicatiekeuze${unresolvedPublications === 1 ? "" : "s"} nodig`
-      : otherOpenItems > 0
-        ? `${otherOpenItems} open punt${otherOpenItems === 1 ? "" : "en"}`
-        : "Controle nodig";
+    : `Nog nodig: ${pendingLocationGroups} plaatsgroep(en), ${pendingPlaylistProposals + unresolvedPlaylists} afspeellijstbeslissing(en), ${unresolvedPublications} inhoudskeuze(s), ${otherOpenItems} overige blokkade(s)`;
 
   return (
     <section className={styles.results} aria-labelledby="merge-results-heading">
@@ -87,7 +116,7 @@ export function SimpleMergeResults({
           <h2 id="merge-results-heading">Resultaat van de vergelijking</h2>
           <p>Je originele back-ups zijn niet gewijzigd.</p>
         </div>
-        <span className={mergePlan.status === "ready" ? styles.readyBadge : styles.reviewBadge}>
+        <span className={fullyReady ? styles.readyBadge : styles.reviewBadge}>
           {statusLabel}
         </span>
       </div>
@@ -107,12 +136,20 @@ export function SimpleMergeResults({
             {publicationConflicts.length === 0
               ? "Geen publicatieconflicten gevonden."
               : `${publicationConflicts.length} conflicterende publicatie${publicationConflicts.length === 1 ? "" : "s"}.`}
-            {unresolvedPublications > 0 && ` ${unresolvedPublications} keuze${unresolvedPublications === 1 ? "" : "s"} nodig.`}
-            {otherOpenItems > 0 && ` ${otherOpenItems} ander open punt${otherOpenItems === 1 ? "" : "en"}.`}
-            {mergePlan.status === "ready" && " Je kunt nu een mergebestand maken."}
+            {` Nog ${pendingLocationGroups} plaatsgroep(en) en ${pendingPlaylistProposals + unresolvedPlaylists} afspeellijstbeslissing(en) te beoordelen, ${unresolvedPublications} inhoudskeuze(s) te maken en ${otherOpenItems} overige blokkade(s) te onderzoeken.`}
+            {fullyReady && " Je kunt nu een mergebestand maken."}
           </p>
         </div>
       </div>
+
+      <LocationResolutionReview
+        preview={preview}
+        metadataChoices={locationMetadataChoices}
+        onChooseMetadata={onChooseLocationMetadata}
+        onConfirm={onConfirmLocations}
+        onDifferent={onMarkLocationsDifferent}
+        onRevoke={onRevokeLocationConfirmation}
+      />
 
       {publicationConflicts.length > 0 && (
         <section className={styles.conflictReview} aria-labelledby="publication-conflicts-heading">

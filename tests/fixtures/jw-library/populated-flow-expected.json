@@ -1,0 +1,42 @@
+{
+  "tableCounts": {
+    "BlockRange": 4,
+    "Bookmark": 1,
+    "IndependentMedia": 1,
+    "InputField": 2,
+    "LastModified": 1,
+    "Location": 3,
+    "Note": 4,
+    "PlaylistItem": 1,
+    "PlaylistItemAccuracy": 1,
+    "PlaylistItemIndependentMediaMap": 1,
+    "PlaylistItemLocationMap": 1,
+    "PlaylistItemMarker": 1,
+    "PlaylistItemMarkerBibleVerseMap": 1,
+    "PlaylistItemMarkerParagraphMap": 1,
+    "Tag": 2,
+    "TagMap": 2,
+    "UserMark": 2,
+    "grdb_migrations": 1
+  },
+  "notes": [
+    { "guid": "00000000-0000-4000-8000-000000000001", "content": "First publication edit from source A.", "documentId": 900001, "keySymbol": "SYNTHETIC" },
+    { "guid": "00000000-0000-4000-8000-000000000002", "content": "This note exists only in the added-note fixture.", "documentId": 900001, "keySymbol": "SYNTHETIC" },
+    { "guid": "00000000-0000-4000-8000-000000000003", "content": "Second publication edit from source A.", "documentId": 900003, "keySymbol": "SYNTHETIC" },
+    { "guid": "00000000-0000-4000-8000-000000000004", "content": "Other publication edit from source B.", "documentId": 900002, "keySymbol": "SYNTHETIC-OTHER" }
+  ],
+  "locations": [
+    { "documentId": 900001, "title": "Publication Alpha" },
+    { "documentId": 900002, "title": "Publication Beta" },
+    { "documentId": 900003, "title": "Alpha appendix A" }
+  ],
+  "inputFields": [
+    { "textTag": "tt20", "value": "Synthetic value" },
+    { "textTag": "tt21", "value": "Additional synthetic value" }
+  ],
+  "markRanges": [
+    { "guid": "00000000-0000-4000-8000-000000001001", "ranges": [[1, 10, 0, 4]] },
+    { "guid": "00000000-0000-4000-8000-000000001002", "ranges": [[1, 20, 0, 2], [1, 20, 3, 5], [2, 21, 0, 1]] }
+  ],
+  "playlist": { "label": "Shared label", "mediaPath": "playlist-media.bin", "durationTicks": 1000 }
+}

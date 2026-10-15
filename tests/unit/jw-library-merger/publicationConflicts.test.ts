@@ -27,6 +27,14 @@ describe("getPublicationConflictGroups", () => {
     expect(groups.map((group) => group.records.length).sort()).toEqual([1, 2]);
     expect(groups.map((group) => group.label).sort()).toEqual(["Publication Alpha", "Publication Beta"]);
 
+    const locationGroups = (await import("../../../src/tools/jw-library-merger/merge/locationProposalGroups"))
+      .getLocationProposalGroups(preview);
+    const alphaPlaces = locationGroups.find((group) => group.label.startsWith("SYNTHETIC · taal 1"));
+    expect(locationGroups).toHaveLength(2);
+    expect(alphaPlaces?.pairs).toHaveLength(2);
+    expect(alphaPlaces?.hasTitleDifference).toBe(true);
+    expect(locationGroups.some((group) => group.label.startsWith("SYNTHETIC-OTHER · taal 1"))).toBe(true);
+
     const samePublication = groups.find((group) => group.records.length === 2)!;
     const otherPublication = groups.find((group) => group.records.length === 1)!;
     expect(samePublication.differences.map((difference) => difference.label)).toEqual([

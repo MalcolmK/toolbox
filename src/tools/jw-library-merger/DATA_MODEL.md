@@ -251,15 +251,23 @@ triggers, views, migration table, and other SQLite metadata remain in place.
 The two sources must have the same reviewed schema version and matching table,
 column, foreign-key, and explicit schema-object descriptions.
 
-Before opening the output copy, the builder checks that each source row is
-represented by a selected plan row or by the same explicit logical identity.
-It preallocates output primary keys, records source-local-to-output mappings,
-and rewrites declared foreign keys through those mappings. Duplicate logical
-identities, absent plan decisions, missing references, SQLite constraint
-errors, foreign-key violations, and failed integrity checks block output.
-The original connections and archive bytes are not changed. The selected
-`LastModified` row is updated in place because the observed schema forbids
-deleting or reinserting that singleton.
+Before writing, the builder indexes source rows and creates a mapping keyed by
+source, table, and local source key. Mapping aliases come only from the reviewed
+plan's explicit source aliases, confirmed place/playlist group members, and the
+selected rows themselves; it does not re-identify candidates during output
+construction. Every source row must map to one output row or have an exact
+source-row omission entry in the plan. An alias with two destinations, an
+unexplained row, or an alias to a missing source row blocks the build.
+
+The builder preallocates and checks output primary keys, uses indexed lookups
+for foreign-key targets, and selects each relationship source from the chosen
+row's source or its `fieldSources` entry. A missing relationship mapping never
+falls back to a local source ID. It preserves the source schema and singleton
+`LastModified` rules, enables and defers foreign-key checks inside a write
+transaction, and checks the completed tables, row counts, foreign keys, and
+SQLite integrity before committing. It then reopens the exported bytes and
+repeats the foreign-key, integrity, and row-count checks. A failure returns no
+database bytes; source connections and archive bytes remain unchanged.
 
 This builder produces database bytes only. It does not rewrite the manifest or
 validate/calculate its hash. Archive packaging is handled separately in

@@ -39,6 +39,7 @@ interface IndexedRecord {
   readonly tableName: string;
   readonly identityKey: string;
   readonly strategy: string;
+  readonly identityStatus: "stable" | "candidate";
   readonly row: UserDataRow;
 }
 
@@ -61,15 +62,17 @@ function recordKey(tableName: string, identityKey: string): string {
   return `${tableName}\u0000${identityKey}`;
 }
 
-function indexStableRecords(snapshot: UserDataSnapshot): RecordGroups {
+function indexStableRecords(snapshot: UserDataSnapshot, includeCandidates = false): RecordGroups {
   const groups: RecordGroups = new Map();
   for (const [tableName, table] of Object.entries(snapshot.tables)) {
     table.rows.forEach((row, index) => {
       const identity = identifyRecord(snapshot, tableName, row, index);
-      if (identity.status !== "stable" || identity.key === null) return;
+      if ((identity.status !== "stable" && !(includeCandidates && identity.status === "candidate"))
+        || identity.key === null) return;
       const key = recordKey(tableName, identity.key);
       const group = groups.get(key) ?? [];
-      group.push({ tableName, identityKey: identity.key, strategy: identity.strategy, row });
+      group.push({ tableName, identityKey: identity.key, strategy: identity.strategy,
+        identityStatus: identity.status, row });
       groups.set(key, group);
     });
   }
@@ -184,8 +187,8 @@ export function compareThreeWay(
 ): ThreeWayComparison {
   const comparisonAB = compareLibraries(sourceA, sourceB);
   const abIndex = pairIndex(comparisonAB);
-  const aGroups = indexStableRecords(sourceA);
-  const bGroups = indexStableRecords(sourceB);
+  const aGroups = indexStableRecords(sourceA, true);
+  const bGroups = indexStableRecords(sourceB, true);
   const baseGroups = base ? indexStableRecords(base) : new Map<string, IndexedRecord[]>();
   const baseAIndex = base ? pairIndex(compareLibraries(base, sourceA)) : new Map<string, ComparedRecord[]>();
   const baseBIndex = base ? pairIndex(compareLibraries(base, sourceB)) : new Map<string, ComparedRecord[]>();
@@ -213,7 +216,7 @@ export function compareThreeWay(
     const baseA = base ? pairRecord(baseAIndex, tableKey) : null;
     const baseB = base ? pairRecord(baseBIndex, tableKey) : null;
     const duplicate = groupA.length > 1 || groupB.length > 1 || groupBase.length > 1;
-    const identityUncertain = !entryA && !entryB && !entryBase;
+    const identityUncertain = identitySource.identityStatus !== "stable";
     const uncertainRelationships = comparisonsHaveUncertainRelationships(ab, baseA, baseB);
 
     const changedFieldsA = new Set(base
