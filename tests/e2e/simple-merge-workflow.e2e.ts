@@ -238,7 +238,7 @@ test("confirms a byte-identical playlist explicitly and includes its media in th
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `playlist layout overflows at ${width}px`).toBe(true);
     const columns = await playlist.locator("[class*=playlistSources]").first().evaluate((element) =>
       getComputedStyle(element).gridTemplateColumns.split(" ").length);
-    expect(columns, `playlist evidence layout at ${width}px`).toBe(width <= 800 ? 1 : 2);
+    expect(columns, `playlist evidence layout at ${width}px`).toBe(width <= 768 ? 1 : 2);
   }
   await same.click();
   await expect(playlist.getByText("Bevestigd: dezelfde afspeellijst.")).toBeVisible();
@@ -521,7 +521,7 @@ test("supports keyboard conflict choices, announces updated status, and keeps co
     const locationFieldColumns = await alphaPlace.locator("[class*=locationFields] > div").first().evaluate((element) =>
       getComputedStyle(element).gridTemplateColumns.split(" ").length,
     );
-    expect(locationFieldColumns, `location detail layout at ${viewport.width}px`).toBe(viewport.width <= 800 ? 1 : 3);
+    expect(locationFieldColumns, `location detail layout at ${viewport.width}px`).toBe(viewport.width <= 768 ? 1 : 3);
     const sourceColumns = await alpha.locator("[class*=conflictSources]").first().evaluate((element) =>
       getComputedStyle(element).gridTemplateColumns.split(" ").length,
     );
