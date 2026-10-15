@@ -12,7 +12,7 @@ comparison; `uncertain` rows must not be paired automatically.
 | `Note` | `Guid` | Stable unique logical identifier. `NoteId` is local only. |
 | `UserMark` | `UserMarkGuid` | Stable unique logical identifier. `UserMarkId` is local only. |
 | `BlockRange` | Parent `UserMarkGuid` + block type, identifier, start, end | Candidate. Duplicate coordinates under one mark make the row uncertain. |
-| `Location` | `BookNumber` + `ChapterNumber` + `KeySymbol` + `MepsLanguage` + `Type` | Candidate only when all key parts exist and the tuple is unique in that source. Otherwise uncertain. |
+| `Location` | Current implementation: `BookNumber` + `ChapterNumber` + `KeySymbol` + `MepsLanguage` + `Type` | Candidate only when all current key parts exist and the tuple is unique in that source. This does not prove cross-backup identity. The approved 0.4.0 scope will describe all ten location fields and require explicit session confirmation before dependent rows can use a proposed link. |
 | `InputField` | Logical `Location` + `TextTag` | Candidate only when the referenced location has a complete candidate key. |
 | `Bookmark` | Logical `PublicationLocation` + `Slot` | Candidate only when the referenced location has a complete candidate key. |
 | `Tag` | `Type` + `Name` | Candidate based on the declared unique constraint; semantic stability is not independently verified. |
@@ -45,6 +45,12 @@ comparison; `uncertain` rows must not be paired automatically.
 
 `compare/recordIdentity.ts` implements these rules. A table-coverage test fails
 if a supported schema table has no explicit policy.
+
+## 0.4.0 location and playlist confirmation scope
+
+The current implementation has no user-confirmed location-resolution context. For the 0.4.0 work, location proposals are limited to supported schema-16 record forms observed in the inspected pair and must compare all ten location fields without normalizing their values. The proposed key excludes the source-local `LocationId` and display `Title`; both remain available as provenance or metadata. A unique exact proposal remains unconfirmed until the user approves the explicitly shown source rows for the active session. Unknown forms, duplicate keys, stale confirmations, or a source row assigned to conflicting groups remain unresolved and block dependent output.
+
+Playlist identity is also not established by the current policy. The approved work requires a user decision based on the full playlist structure, including accuracy, dependent mappings, locations, markers, media metadata, and actual media bytes. Labels alone are not identity. A/B content choices remain separate from both location and playlist identity decisions.
 
 Per-snapshot lookup indexes are used for source-local foreign-key targets,
 location candidate counts, and mark-range candidate counts. They avoid

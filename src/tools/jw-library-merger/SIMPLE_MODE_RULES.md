@@ -1,6 +1,16 @@
 # Simple mode merge rules
 
-This document defines the policy implemented by `merge/simpleMerge.ts`. The planner and its browser workflow compare validated snapshots and prepare source-attributed choices; they do not mutate or rewrite either input. A separate database builder turns a fully resolved Simple mode plan into SQLite bytes after integrity checks, and the local archive/download flow is connected. The production flow currently stops at the fail-closed manifest gate because JW Library's hash rule is unverified. The goal is to retain as much information as possible while choosing the newest version when recency can be established. Every choice that omits a distinct value must be described in the result report.
+This document describes the implemented policy in `merge/simpleMerge.ts` and the approved 0.4.0 extension below. The planner and its browser workflow compare validated snapshots and prepare source-attributed choices; they do not mutate or rewrite either input. A separate database builder turns a fully resolved Simple mode plan into SQLite bytes after integrity checks, and the local POC archive/download flow is connected. The POC may use a copied manifest hash explicitly labeled unverified; the production hash-verification route remains fail-closed. The goal is to retain as much information as possible while choosing the newest version when recency can be established. Every choice that omits a distinct value must be described in the result report.
+
+## 0.4.0 approved scope — implementation pending
+
+The following rules define the next implementation scope. They are not claims about the current UI or merge planner until their corresponding code and tests are complete:
+
+- Place identity confirmation and content selection are separate decisions. The user must explicitly confirm proposed place links for the current merge session; confirmation cannot be inferred from a title, a shared GUID on a dependent record, or an unconfirmed composite key.
+- Playlist links also require an explicit user decision based on the complete reviewed playlist structure, including its dependent rows and actual media bytes. An unresolved or conflicting required link blocks output.
+- A publication-level A/B choice applies to eligible conflicting records only. It must not discard one-sided additions from either input.
+- The initial profile is limited to schema version 16 and the record forms observed in the inspected source pair. Unsupported or mixed forms remain blocking until separately reviewed.
+- The provisional POC manifest hash remains explicitly unverified. Hash research is not a prerequisite for producing a candidate under this scope, and a ZIP/database check is not JW Library acceptance evidence.
 
 ## 1. Preconditions and source order
 

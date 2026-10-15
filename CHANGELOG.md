@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0 — 2026-10-15
+
+- Completed Step 1 for the confirmed-link and populated Simple Mode POC scope. Recorded the approved separation between place/playlist identity confirmation and publication A/B content choices, the schema-16 boundary, the unverified-hash POC rule, and the rule that unresolved required links block output. These are scoped requirements; the confirmation flow and populated merge are not implemented yet. Read-only checks of the two local source backups confirmed 18 tables, schema version 16, clean SQLite integrity and foreign-key checks, and the expected aggregate differences; no personal note text or media payload was added to the repository.
+- Set the active work-round version to 0.4.0 in the package metadata. Verification with Node.js 22.23.3: all 115 unit tests passed, all 27 end-to-end runs passed across Chromium, Microsoft Edge, and Playwright WebKit, and the production build passed. The initial restricted-process attempt returned `spawn EPERM`; the same e2e suite passed when run with browser-process access, so no project-code workaround was needed.
+
 ## 0.3.0 — 2026-10-15
 
 - Assessed Step 7: a safe populated conflict download cannot yet be produced because `Location` composite keys remain candidate identities. Documented that synthetic key equality is not proof of cross-backup equivalence, retained the e2e fail-closed check, and made a validated location-resolution decision the prerequisite for populated output and JW Library restore testing. Rechecked 115 unit tests, the production build, and all 27 browser runs; all passed. Kept the release at 0.3.0.

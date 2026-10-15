@@ -1,6 +1,6 @@
 # Merge readiness
 
-Status checked from the version 0.3.0 source on 2026-10-15. This describes what the app can do now and what still needs evidence before relying on a restored library.
+Current implementation status checked on 2026-10-15: package version 0.4.0 is the active work round; the existing interface and merger behavior originate from version 0.3.0. This document separates implemented behavior from the 0.4.0 target and from evidence needed before relying on a restored library.
 
 ## What works in the current flow
 
@@ -12,6 +12,12 @@ Status checked from the version 0.3.0 source on 2026-10-15. This describes what 
 
 Advanced Mode is hidden from the interface. Its implementation remains in the source tree but is not part of the user flow.
 
+## 0.4.0 scope and source-pair baseline
+
+The two selected local backups remain available in Downloads and both report schema version 16. Read-only inspection found 18 tables in each database; SQLite `integrity_check` returns `ok` and `foreign_key_check` returns no violations for both. Each has 2,073 `Location` rows and 4,268 `Note` rows. Their location-type counts are 2,018 of type 0, 35 of type 1, and 20 of type 3. Backup B has 18,961 `UserMark` rows, 19,044 `BlockRange` rows, and 579 `InputField` rows; backup A has 18,960, 19,041, and 578 respectively. Each archive contains the default thumbnail and one referenced media file, and that media reference resolves in the archive. No note text, media payload, or detailed content report is included here.
+
+The 0.4.0 target is to let the user explicitly confirm proposed location and playlist links within the active merge session, then build a populated POC only when all required decisions and data checks are resolved. Identity confirmation remains separate from A/B conflict choices. A/B choices apply only to conflicts; one-sided additions must remain eligible for preservation. This flow is not implemented yet. The existing app still treats location keys as candidates and playlist identities as uncertain, so the current populated merge remains blocked.
+
 ## Manifest hash decision for the POC
 
 The earlier project decision was to avoid making hash research a prerequisite for a bounded restore experiment. The current POC copies a source manifest's non-empty hash and explicitly marks it unverified. This lets the user try a candidate archive in a disposable JW Library profile now.
@@ -20,8 +26,8 @@ That candidate is not represented as a verified production backup. If JW Library
 
 ## Remaining work, in priority order
 
-1. **Resolve `Location` identity before attempting a populated A/B output.** The current policy labels `Location` composite keys as candidates, not confirmed cross-backup identities. Making a synthetic fixture with identical key fields does not validate that those locations are equivalent in real backups. Do not promote the key or bypass the unresolved plan just to obtain a download. Define and validate a user-visible location-mapping decision or a stronger evidenced identity rule first. Then create a populated fixture with conflicts in separate publications and linked records; verify selected rows, ID remapping, foreign keys, retained/omitted values, ZIP contents, unchanged source files, and no uploads in the actual downloaded database. Existing browser checks verify that A/B publication choices leave uncertain location records blocked; successful download tests currently use empty libraries.
-2. **Try a populated candidate in JW Library.** This depends on completing item 1 and producing a safely linked populated candidate. Then use a disposable test profile and confirm whether JW Library accepts and reopens it; compare the expected notes, marks, ranges, tags, bookmarks, and relationships. No populated candidate is currently available for this restore test, and the automated successful-download fixture is empty, so populated retention and JW Library acceptance remain unverified.
+1. **Implement confirmed location and playlist links before a populated output.** The user must see and confirm explicit location proposals and playlist matches; identity decisions must remain separate from content A/B choices. Confirmations must be tied to the active source pair and invalidated when it changes. Unknown forms, duplicates, stale decisions, and conflicting mappings remain blocking. A synthetic fixture with matching keys is not enough evidence by itself. Then create a populated fixture with conflicts in separate publications and linked additions; verify selected rows, ID remapping, foreign keys, retained/omitted values, ZIP contents, unchanged source files, and no uploads in the actual downloaded database. Existing browser checks verify that A/B publication choices leave uncertain location records blocked; successful download tests currently use empty libraries.
+2. **Separate technical delivery from JW Library acceptance.** This depends on completing item 1 and producing and checking a populated candidate for the selected backups. Before proposing a restore, state the candidate's concrete losses and checks, ask for explicit confirmation to restore into the user's existing JW Library, record any changes made to that library since the source backups, and obtain a fresh backup of the current library. The user performs the restore and reports the app result; compare a new post-restore export against the candidate. Never imply that implementation permission authorizes a restore. No populated candidate is currently available, so populated retention and JW Library acceptance remain unverified.
 3. **Expand supported cases from evidence.** The validator currently accepts schema version 16 only. Review any other app schema versions and any rows, media paths, or database objects that cannot safely be matched or retained before enabling them.
 4. **Check file-size and memory handling.** ZIP and SQLite operations can use substantially more memory than the compressed file size. Add conservative preflight limits and clear stop behavior after selecting representative backups and devices. Never offer a result after an interrupted or failed check.
 

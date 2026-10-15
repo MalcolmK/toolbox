@@ -2,7 +2,7 @@
 
 A responsive, browser-based toolbox. Its first tool combines JW Library backup files locally in the browser.
 
-Current development version: **0.3.0**.
+Current development version: **0.4.0**.
 
 ## JW Library Merger
 
@@ -13,6 +13,12 @@ Current development version: **0.3.0**.
 3. If the plan is ready, select **Maak mergebestand** and download the POC file.
 
 The files stay on your device and the source backups are not changed. Each A/B choice applies only to the eligible conflicts shown under that publication. Records with uncertain identities or relationships remain unresolved and continue to block file creation. The result shows how many publication choices remain. A POC notice appears as soon as the comparison finishes: ZIP and database checks do not prove that JW Library accepts the generated backup. Advanced Mode is temporarily unavailable in the interface; its code remains in the project.
+
+### Scope of the 0.4.0 work
+
+The current implementation still treats `Location` matches as candidates and playlist-item identities as uncertain. The 0.4.0 work is scoped to schema version 16 and to the record forms observed in the two locally inspected backups. It will add explicit, session-bound confirmation of proposed place links and playlist links. A match proposal will not itself confirm identity, and unknown or conflicting required links must continue to block a download. A publication's A/B choice will apply only to conflicting content in that publication; one-sided additions remain eligible for preservation. These are the approved implementation rules for this work round; they must not be described as implemented until the corresponding flow and checks exist.
+
+The two inspected backups each contain 2,073 `Location` rows and 4,268 `Note` rows. Backup B contains one additional `UserMark`, three additional `BlockRange` rows, and one additional `InputField`. Both report schema version 16, contain 18 tables, and pass SQLite integrity and foreign-key checks. These aggregates are a source-pair baseline, not proof that the merger currently preserves the records or that JW Library accepts a generated file.
 
 ### What the download means
 
@@ -57,7 +63,7 @@ The complete Simple Mode e2e suite now passes: 27 browser runs across nine workf
 
 The seven previously failing Simple Mode scenarios were reviewed against the merge rules: content conflicts require a manual A/B choice; database and manifest timestamps are tested only on non-conflicting `changed` rows; timestamp offsets compare by instant; ties use the documented fallback; and the tests cover `Created` preservation and relationship reporting. The timestamp cases still leave uncertain `Location` rows unresolved, so they do not claim that a populated archive can be built. Manual `Created` preservation also records which backup supplied that field.
 
-A populated conflict download is still unverified. The current identity policy treats `Location` composite keys as candidates, not proven cross-backup identities. A synthetic match of those fields does not prove two locations in real backups are equivalent, so the merge remains blocked instead of forcing a populated output. The existing e2e workflow verifies that publication choices do not remove this blocker. A populated archive and a JW Library restore test require an explicit, validated way to resolve those location links first.
+A populated conflict download is still unverified. The current identity policy treats `Location` composite keys as candidates, not proven cross-backup identities. A synthetic match of those fields does not prove two locations in real backups are equivalent, so the merge remains blocked instead of forcing a populated output. The existing e2e workflow verifies that publication choices do not remove this blocker. The new confirmation flow, complete populated-fixture proof, and per-source relationship accounting remain future work in this 0.4.0 round. A populated archive and a JW Library restore test require explicit, validated place and playlist decisions first.
 
 ## Technology and deployment
 
