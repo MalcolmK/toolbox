@@ -686,7 +686,7 @@
   }
 
   .menuButtonOpen {
-    left: calc(min(86vw, 22rem) - 4.3125rem);
+    left: calc(min(86vw, 22rem) - 3.25rem);
   }
 }
 
@@ -723,7 +723,7 @@
   }
 
   .menuButtonOpen {
-    left: calc(min(88vw, 22rem) - 4.3125rem);
+    left: calc(min(88vw, 22rem) - 3.25rem);
   }
 
   .placeholderDialog {

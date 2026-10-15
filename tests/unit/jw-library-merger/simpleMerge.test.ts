@@ -5,6 +5,7 @@ import { readJwLibrary } from "../../../src/tools/jw-library-merger/archive/read
 import { readUserData, type UserDataSnapshot } from "../../../src/tools/jw-library-merger/database/readUserData";
 import { validateUserData } from "../../../src/tools/jw-library-merger/database/validateUserData";
 import { simpleMerge } from "../../../src/tools/jw-library-merger/merge/simpleMerge";
+import { simpleMergeReviewKey } from "../../../src/tools/jw-library-merger/merge/publicationConflicts";
 
 const fixtureUrl = (name: string) => new URL(`../../fixtures/jw-library/${name}`, import.meta.url);
 const sqliteWasm = new URL("../../../node_modules/sql.js/dist/sql-wasm.wasm", import.meta.url);
@@ -80,22 +81,31 @@ function replaceManifestTimestamp(snapshot: UserDataSnapshot, timestamp: string 
 }
 
 describe("simpleMerge", () => {
-  it("returns a pure, source-attributed in-memory plan for changed note content", async () => {
+  it("requires an explicit A/B choice for conflicting note content and reports the chosen source", async () => {
     const a = await readSnapshot("base.jwlibrary");
     const b = await readSnapshot("modified-note-newer.jwlibrary");
     try {
-      const result = simpleMerge(a.snapshot, b.snapshot);
+      const pending = simpleMerge(a.snapshot, b.snapshot);
+      const pendingNote = pending.records.find((record) => record.tableName === "Note");
+
+      expect(pendingNote).toMatchObject({
+        comparisonStatus: "possible-conflict",
+        action: "needs-review",
+        selected: null,
+        confidence: "unresolved",
+      });
+      expect(pendingNote?.retainedAlternatives.map((alternative) => alternative.source)).toEqual(["A", "B"]);
+
+      const reviewChoices = new Map([[simpleMergeReviewKey("Note", pendingNote!.identityKey!), "B" as const]]);
+      const result = simpleMerge(a.snapshot, b.snapshot, reviewChoices);
       const note = result.records.find((record) => record.tableName === "Note");
 
-      expect(result.status).toBe("needs-review");
+      expect(result.status).toBe("needs-review"); // The separate Location uncertainty remains fail-closed.
       expect(note).toMatchObject({
         comparisonStatus: "possible-conflict",
         action: "keep-one",
-        selected: {
-          source: "B",
-          row: { Content: expect.stringContaining("Updated text"), LastModified: "2026-10-11T12:00:00Z" },
-        },
-        confidence: "record-timestamp",
+        selected: { source: "B", row: { Content: expect.stringContaining("Updated text") } },
+        confidence: "manual-choice",
       });
       expect(result.report.informationLoss).toEqual(expect.arrayContaining([
         expect.objectContaining({
@@ -143,13 +153,13 @@ describe("simpleMerge", () => {
     const a = await readSnapshot("conflict-source-a.jwlibrary");
     const b = await readSnapshot("conflict-source-b.jwlibrary");
     try {
-      const snapshotA = replaceNote(a.snapshot, { LastModified: null });
-      const snapshotB = replaceNote(b.snapshot, { LastModified: "not-a-time" });
+      const snapshotA = replaceNote(a.snapshot, { Content: "Same content", LastModified: null });
+      const snapshotB = replaceNote(b.snapshot, { Content: "Same content", LastModified: "not-a-time" });
       const result = simpleMerge(snapshotA, snapshotB);
       const note = result.records.find((record) => record.tableName === "Note");
 
       expect(note).toMatchObject({
-        selected: { source: "B", row: { Content: expect.stringContaining("source B") } },
+        selected: { source: "B", row: { Content: "Same content" } },
         confidence: "database-timestamp",
       });
       expect(result.report.warnings.some((warning) => warning.includes("Note")
@@ -166,13 +176,13 @@ describe("simpleMerge", () => {
     const a = await readSnapshot("conflict-source-a.jwlibrary");
     const b = await readSnapshot("conflict-source-b.jwlibrary");
     try {
-      const snapshotA = replaceNote(a.snapshot, { LastModified: "2026-10-11T14:00:00+0200" });
-      const snapshotB = replaceNote(b.snapshot, { LastModified: "2026-10-11T12:30:00Z" });
+      const snapshotA = replaceNote(a.snapshot, { Content: "Same content", LastModified: "2026-10-11T14:00:00+0200" });
+      const snapshotB = replaceNote(b.snapshot, { Content: "Same content", LastModified: "2026-10-11T12:30:00Z" });
       const result = simpleMerge(snapshotA, snapshotB);
       const note = result.records.find((record) => record.tableName === "Note");
 
       expect(note).toMatchObject({
-        selected: { source: "B", row: { Content: expect.stringContaining("source B") } },
+        selected: { source: "B", row: { Content: "Same content" } },
         confidence: "record-timestamp",
       });
       expect(note?.rule).toContain("12:30:00.000Z");
@@ -186,8 +196,8 @@ describe("simpleMerge", () => {
     const a = await readSnapshot("conflict-source-a.jwlibrary");
     const b = await readSnapshot("conflict-source-b.jwlibrary");
     try {
-      const snapshotA = replaceNote(a.snapshot, { LastModified: "2026-10-11T14:00:00+0200" });
-      const snapshotB = replaceNote(b.snapshot, { LastModified: "2026-10-11T12:00:00Z" });
+      const snapshotA = replaceNote(a.snapshot, { Content: "Same content", BlockType: 0, LastModified: "2026-10-11T14:00:00+0200" });
+      const snapshotB = replaceNote(b.snapshot, { Content: "Same content", BlockType: 1, LastModified: "2026-10-11T12:00:00Z" });
       const result = simpleMerge(snapshotA, snapshotB);
       const note = result.records.find((record) => record.tableName === "Note");
 
@@ -203,11 +213,11 @@ describe("simpleMerge", () => {
     const b = await readSnapshot("conflict-source-b.jwlibrary");
     try {
       const snapshotA = replaceManifestTimestamp(
-        replaceNote(replaceDatabaseTimestamp(a.snapshot, null), { LastModified: "2026-10-11T12:00:00Z" }),
+        replaceNote(replaceDatabaseTimestamp(a.snapshot, null), { Content: "Same content", BlockType: 0, LastModified: "2026-10-11T12:00:00Z" }),
         "2026-10-11T11:00:00Z",
       );
       const snapshotB = replaceManifestTimestamp(
-        replaceNote(replaceDatabaseTimestamp(b.snapshot, null), { LastModified: "2026-10-11T12:00:00Z" }),
+        replaceNote(replaceDatabaseTimestamp(b.snapshot, null), { Content: "Same content", BlockType: 1, LastModified: "2026-10-11T12:00:00Z" }),
         "2026-10-11T12:00:00Z",
       );
       const result = simpleMerge(snapshotA, snapshotB);
@@ -225,9 +235,10 @@ describe("simpleMerge", () => {
     const a = await readSnapshot("conflict-source-a.jwlibrary");
     const b = await readSnapshot("conflict-source-b.jwlibrary");
     try {
-      const snapshotA = replaceNote(a.snapshot, { Created: "2026-10-01T09:00:00Z" });
-      const snapshotB = replaceNote(b.snapshot, { Created: "2026-10-02T09:00:00Z" });
-      const result = simpleMerge(snapshotA, snapshotB);
+      const snapshotA = replaceNote(a.snapshot, { Content: "Content A", Created: "2026-10-01T09:00:00Z" });
+      const snapshotB = replaceNote(b.snapshot, { Content: "Content B", Created: "2026-10-02T09:00:00Z" });
+      const noteIdentity = simpleMerge(snapshotA, snapshotB).records.find((record) => record.tableName === "Note")!.identityKey!;
+      const result = simpleMerge(snapshotA, snapshotB, new Map([[simpleMergeReviewKey("Note", noteIdentity), "B" as const]]));
       const note = result.records.find((record) => record.tableName === "Note");
 
       expect(note?.selected?.source).toBe("B");
@@ -253,7 +264,8 @@ describe("simpleMerge", () => {
     const b = await readSnapshot("modified-note-newer.jwlibrary");
     try {
       const snapshotB = replaceNote(b.snapshot, { UserMarkId: 1 });
-      const result = simpleMerge(a.snapshot, snapshotB);
+      const noteIdentity = simpleMerge(a.snapshot, snapshotB).records.find((record) => record.tableName === "Note")!.identityKey!;
+      const result = simpleMerge(a.snapshot, snapshotB, new Map([[simpleMergeReviewKey("Note", noteIdentity), "B" as const]]));
 
       expect(result.report.informationLoss).toEqual(expect.arrayContaining([
         expect.objectContaining({

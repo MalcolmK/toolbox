@@ -4,7 +4,7 @@ import { compareLibraries, type ComparedRecord, type ComparisonStatus } from "..
 import { normalizeTimestamp, type NormalizedTimestamp } from "../compare/normalizeTimestamp";
 
 export type MergeSource = "A" | "B";
-export type MergeConfidence = "identical" | "record-timestamp" | "database-timestamp" | "manifest-timestamp" | "unresolved";
+export type MergeConfidence = "identical" | "record-timestamp" | "database-timestamp" | "manifest-timestamp" | "manual-choice" | "unresolved";
 
 export interface MergeRowCandidate {
   readonly source: MergeSource;
@@ -302,6 +302,7 @@ function fieldLosses(
 export function simpleMerge(
   snapshotA: UserDataSnapshot,
   snapshotB: UserDataSnapshot,
+  reviewChoices: ReadonlyMap<string, MergeSource> = new Map(),
 ): SimpleMergeResult {
   const pair: SnapshotPair = { A: snapshotA, B: snapshotB };
   const comparison = compareLibraries(snapshotA, snapshotB);
@@ -362,6 +363,72 @@ export function simpleMerge(
     }
 
     if ((compared.status === "changed" || compared.status === "possible-conflict") && sourceA && sourceB) {
+      const reviewChoice = compared.identityKey
+        ? reviewChoices.get(`${compared.tableName}:${compared.identityKey}`)
+        : undefined;
+      if (reviewChoice && compared.identityStatus !== "uncertain") {
+        const selectedRow = rowWithPreservedCreated(compared, reviewChoice) ??
+          (reviewChoice === "A" ? sourceA.row : sourceB.row);
+        const selectedCandidate = {
+          ...(reviewChoice === "A" ? sourceA : sourceB),
+          row: selectedRow,
+          ...(selectedRow.Created !== (reviewChoice === "A" ? sourceA.row.Created : sourceB.row.Created)
+            ? { fieldSources: { Created: selectedRow.Created === sourceA.row.Created ? "A" as const : "B" as const } }
+            : {}),
+        };
+        const reason = `Je hebt voor deze publicatie back-up ${reviewChoice} gekozen.`;
+        records.push({
+          tableName: compared.tableName,
+          identityKey: compared.identityKey,
+          identityStatus: compared.identityStatus,
+          comparisonStatus: compared.status,
+          action: "keep-one",
+          selected: selectedCandidate,
+          retainedAlternatives: [],
+          confidence: "manual-choice",
+          rule: reason,
+        });
+        choices.push({
+          tableName: compared.tableName,
+          identityKey: compared.identityKey,
+          selectedSource: reviewChoice,
+          confidence: "manual-choice",
+          reason,
+        });
+        informationLoss.push(...fieldLosses(compared, reviewChoice, selectedRow, reason));
+        continue;
+      }
+
+      if (compared.status === "possible-conflict") {
+        const unresolvedReason = "Deze publicatie wijkt in beide back-ups inhoudelijk af. Kies welke versie je wilt behouden.";
+        records.push({
+          tableName: compared.tableName,
+          identityKey: compared.identityKey,
+          identityStatus: compared.identityStatus,
+          comparisonStatus: compared.status,
+          action: "needs-review",
+          selected: null,
+          retainedAlternatives: [sourceA, sourceB],
+          confidence: "unresolved",
+          rule: unresolvedReason,
+        });
+        choices.push({
+          tableName: compared.tableName,
+          identityKey: compared.identityKey,
+          selectedSource: null,
+          confidence: "unresolved",
+          reason: unresolvedReason,
+        });
+        unresolved.push({
+          tableName: compared.tableName,
+          identityKey: compared.identityKey,
+          reason: unresolvedReason,
+          sourceA,
+          sourceB,
+        });
+        continue;
+      }
+
       const recordDecision = decideRecordTime(compared);
       const selectedSource = recordDecision?.source ?? recency.source;
       const confidence = recordDecision?.confidence ?? recency.confidence;

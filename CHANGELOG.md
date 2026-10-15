@@ -1,12 +1,22 @@
 # Changelog
 
-## 0.2.1 — 2026-10-15
+## 0.3.0 — 2026-10-15
 
-- Regenerated the npm lockfile from `package.json`, including all optional Rolldown platform bindings such as the Linux x64 GNU binding required by GitHub Actions; npm refreshed transitive versions within the existing dependency ranges.
-- Updated checkout and setup-node actions in the browser-test and GitHub Pages workflows to v7, and aligned both workflows on Node.js 22.23.3.
-- Reduced Playwright concurrency to two workers in CI and simplified the note-text persistence flow to verify one forward/back navigation before resolving the remaining conflicts. This targets the WebKit-only 30-second timeout during reverse navigation.
-- Limited automatic GitHub Pages deployments to pushes to `main`; manual deployment remains available through `workflow_dispatch`.
-- Increased the timeout for the WebKit note-conflict end-to-end flow, which exceeded Playwright's 30-second default in CI.
+- Assessed Step 7: a safe populated conflict download cannot yet be produced because `Location` composite keys remain candidate identities. Documented that synthetic key equality is not proof of cross-backup equivalence, retained the e2e fail-closed check, and made a validated location-resolution decision the prerequisite for populated output and JW Library restore testing. Rechecked 115 unit tests, the production build, and all 27 browser runs; all passed. Kept the release at 0.3.0.
+
+- Updated the Simple Mode policy and unit expectations: `possible-conflict` content always requires an explicit per-publication A/B choice, while timestamp fallback tests now cover only automatically resolvable `changed` rows. Fixed the mobile navigation close button position found by WebKit. Documented that a publication choice cannot resolve uncertain `Location` identities or relationships. Verified 115 unit tests, the production build, and all 27 browser runs across Chromium, Microsoft Edge, and WebKit; kept the release at 0.3.0.
+- Audited the seven previously failing Simple Mode scenarios against fixture identities and merge rules. Kept conflicting note content on explicit review and kept uncertain `Location` identities blocked. Recorded the source of a separately preserved `Created` field after a manual A/B choice and added a regression assertion for that provenance.
+- Re-ran the complete checks after the audit: 115 unit tests passed, the production build passed, and all 27 Playwright runs passed across Chromium, Microsoft Edge, and WebKit. No version bump; the work remains under 0.3.0.
+
+- Simplified the visible merger into a three-step Simple Mode flow, added A/B choices for eligible conflicts grouped by publication, hid Advanced Mode from the interface while retaining its implementation, and moved technical comparison details behind optional disclosures.
+- Clarified when an unresolved plan cannot produce a file and kept the POC download visibly separate from a JW Library-verified backup.
+- Added a current merger-readiness assessment: the POC can be tried without first proving a hash formula, while populated merge coverage, data preservation, and JW Library restore compatibility still need acceptance evidence.
+- Added two visual directions for the simplified workflow. No merge rules or POC verification claims were expanded in this round.
+- Tightened the comparison screen to show a compact outcome and publication choices first, with detailed counts behind a disclosure. The POC acceptance notice now appears immediately after comparison; the README makes clear that hash verification is not required before creating a first candidate.
+- Added synthetic coverage with multiple eligible conflicts in one publication, an independent conflict in another publication, and an unresolved playlist identity. Publication choices are now considered complete only when every eligible record in that group has the same explicit source selection.
+- Replaced outdated Advanced Mode e2e steps with Simple Mode coverage for invalid inputs, replacing files, restarting, reversible publication choices, download gating, local POC generation, archive entries, unchanged source files, and no request bodies. All 24 browser runs passed across Chromium, Microsoft Edge, and WebKit. Documented that populated conflict fixtures still block on uncertain `Location` identities; successful download coverage uses empty schema-valid libraries.
+- Added a polite live status for the comparison summary so assistive technology can receive updates when the remaining publication choices change. Expanded e2e checks for keyboard navigation and activation, visible focus, A/B `aria-pressed` state, populated conflict-card layouts at 375/768/1440 pixels, overflow and control fit, and calculated text/focus contrast in light and dark themes. The full suite passes all 27 browser runs across Chromium, Microsoft Edge, and Playwright WebKit. Real screen-reader and Apple Safari checks remain outside this automated evidence; kept version 0.3.0.
+- Confirmed that Simple Mode opens from the toolbox card and that neither the merger screen nor mobile tool navigation exposes an Advanced Mode or three-way base entry. Reconciled the readiness checklist with completed UI coverage and the remaining populated-output, JW Library restore, schema, and memory evidence. README, readiness notes, package version, and changelog all remain on 0.3.0.
 
 ## 0.2.0 — 2026-10-14
 

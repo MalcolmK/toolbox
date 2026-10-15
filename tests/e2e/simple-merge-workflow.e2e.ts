@@ -6,6 +6,59 @@ import { fileURLToPath } from "node:url";
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const fixture = (name: string) => resolve(testDirectory, "../fixtures/jw-library", name);
 
+test("shows a compact comparison status and the POC notice before file creation", async ({ page }) => {
+  await page.goto("#library-merger");
+  await expect(page.getByRole("radio")).toHaveCount(0);
+
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up A").setInputFiles(fixture("empty-a.jwlibrary"));
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up B").setInputFiles(fixture("empty-b.jwlibrary"));
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
+
+  await expect(page.getByRole("heading", { name: "Resultaat van de vergelijking" })).toBeVisible();
+  await expect(page.getByText("Klaar om bestand te maken")).toBeVisible();
+  await expect(page.getByRole("note", { name: "POC-status" })).toContainText("acceptatie in JW Library is niet bevestigd");
+  await expect(page.getByRole("button", { name: "Maak mergebestand" })).toBeVisible();
+
+  const extendedDifferences = page.locator("details").filter({ hasText: "Bekijk uitgebreide verschilcijfers" });
+  await expect(extendedDifferences).toHaveJSProperty("open", false);
+});
+
+test("applies reversible A/B choices per publication and keeps an uncertain identity blocked", async ({ page }) => {
+  await page.goto("#library-merger");
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up A").setInputFiles(fixture("publication-conflicts-a.jwlibrary"));
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up B").setInputFiles(fixture("publication-conflicts-b.jwlibrary"));
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
+
+  const cards = page.locator("[class*=conflictCard]");
+  await expect(cards).toHaveCount(2);
+  const firstPublication = cards.filter({ has: page.getByRole("heading", { name: "Publication Alpha", exact: true }) });
+  const otherPublication = cards.filter({ has: page.getByRole("heading", { name: "Publication Beta", exact: true }) });
+  await expect(firstPublication).toContainText("First publication note");
+  await expect(firstPublication).toContainText("Second publication note");
+  await expect(otherPublication).toContainText("Other publication note");
+
+  const firstA = firstPublication.getByRole("button", { name: "Gebruik versie A voor deze publicatie" });
+  const firstB = firstPublication.getByRole("button", { name: "Gebruik versie B voor deze publicatie" });
+  const otherA = otherPublication.getByRole("button", { name: "Gebruik versie A voor deze publicatie" });
+  const otherB = otherPublication.getByRole("button", { name: "Gebruik versie B voor deze publicatie" });
+
+  await firstA.click();
+  await expect(firstA).toHaveAttribute("aria-pressed", "true");
+  await expect(otherA).toHaveAttribute("aria-pressed", "false");
+  await firstB.click();
+  await expect(firstB).toHaveAttribute("aria-pressed", "true");
+  await expect(otherB).toHaveAttribute("aria-pressed", "false");
+  await firstA.click();
+  await otherB.click();
+  await expect(firstA).toHaveAttribute("aria-pressed", "true");
+  await expect(otherB).toHaveAttribute("aria-pressed", "true");
+
+  await expect(page.getByText(/\d+ open punten?/)).toBeVisible();
+  await expect(page.getByText("Afspeellijstitem").first()).toBeVisible();
+  await expect(page.getByText(/Voor deze back-ups is nu geen veilig mergebestand beschikbaar/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "3. Maak mergebestand" })).toHaveCount(0);
+});
+
 async function inspectDownloadedJwLibrary(download: Download) {
   const stream = await download.createReadStream();
   if (!stream) throw new Error("De browserdownload kon niet worden gelezen.");
@@ -33,19 +86,17 @@ async function selectedSourceDigests(page: import("@playwright/test").Page) {
 
 test("selects two synthetic backups, shows the Simple mode plan, and stays usable across viewport sizes", async ({ page }) => {
   await page.goto("#library-merger");
-  await expect(page.getByRole("heading", { name: "JW Library Merger" })).toBeVisible();
-  await expect(page.getByRole("radio", { name: "Simpel" })).toBeChecked();
-  await expect(page.getByRole("radio", { name: "Geavanceerd" })).toBeEnabled();
+  await expect(page.getByRole("heading", { name: "Back-ups samenvoegen" })).toBeVisible();
+  await expect(page.getByRole("radio")).toHaveCount(0);
 
-  await page.getByLabel("Kies .jwlibrary-bestand A").setInputFiles(fixture("base.jwlibrary"));
-  await page.getByLabel("Kies .jwlibrary-bestand B").setInputFiles(fixture("new-note.jwlibrary"));
-  await page.getByRole("button", { name: "Controleer en maak mergeplan" }).click();
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up A").setInputFiles(fixture("base.jwlibrary"));
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up B").setInputFiles(fixture("new-note.jwlibrary"));
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
 
-  await expect(page.getByRole("heading", { name: "Vergelijking en mergeplan" })).toBeVisible();
-  await expect(page.getByText("Geldig JW Library-bestand · schema 16")).toHaveCount(2);
-  await expect(page.getByText("Controle nodig")).toBeVisible();
-  await expect(page.getByText(/De bestandsstap is geblokkeerd/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Naar bestand maken" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Resultaat van de vergelijking" })).toBeVisible();
+  await expect(page.getByText("Geldig JW Library-bestand.")).toHaveCount(2);
+  await expect(page.getByRole("note", { name: "POC-status" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "3. Maak mergebestand" })).toHaveCount(0);
 
   await page.getByText(/Alle inhoudelijke verschillen bekijken/).click();
   await expect(page.getByText("Aantekening: Added synthetic note")).toBeVisible();
@@ -67,133 +118,66 @@ test("selects two synthetic backups, shows the Simple mode plan, and stays usabl
   }
 });
 
-test("compares an optional base against A and B without treating it as an output source", async ({ page }) => {
-  await page.goto("#library-merger");
-  await page.getByRole("radio", { name: "Geavanceerd" }).check();
-  await expect(page.getByLabel("Kies .jwlibrary-bestand als basisversie", { exact: true })).toBeVisible();
+test("keeps Advanced Mode and three-way base selection out of the Simple Mode interface", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("#toolbox");
+  const mergerTool = page.locator("main").getByRole("link", { name: /JW Library Merger/ });
+  await expect(mergerTool).toBeVisible();
+  await mergerTool.click();
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(page.getByLabel("Kies een .jwlibrary-bestand voor Back-up A")).toBeVisible();
+  await expect(page.getByLabel("Kies een .jwlibrary-bestand voor Back-up B")).toBeVisible();
+  await expect(page.getByLabel(/basisversie/i)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Geavanceerd/i })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Advanced|Geavanceerd/i })).toHaveCount(0);
 
-  await page.getByLabel("Kies .jwlibrary-bestand als basisversie", { exact: true }).setInputFiles(fixture("base.jwlibrary"));
-  await page.getByLabel("Kies .jwlibrary-bestand A", { exact: true }).setInputFiles(fixture("modified-note-newer.jwlibrary"));
-  await page.getByLabel("Kies .jwlibrary-bestand B", { exact: true }).setInputFiles(fixture("base.jwlibrary"));
-  await page.getByRole("button", { name: "Vergelijk wijzigingen" }).click();
-
-  await expect(page.getByRole("heading", { name: "Driewegvergelijking" })).toBeVisible();
-  await expect(page.getByText("Basisversie gebruikt")).toBeVisible();
-  await expect(page.getByText("Wijziging alleen in A").first()).toBeVisible();
-  await expect(page.getByText(/Basisversie: base\.jwlibrary/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Naar bestand maken" })).toHaveCount(0);
-  await expect(page.getByText(/De basisversie is alleen gebruikt om wijzigingen te herkennen/)).toBeVisible();
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const toolsNavigation = page.getByRole("navigation", { name: "Tools" });
+  await expect(toolsNavigation.getByRole("link", { name: "JW Library Merger" })).toBeVisible();
+  await expect(toolsNavigation.getByRole("link", { name: /Advanced|Geavanceerd/i })).toHaveCount(0);
+  await expect(toolsNavigation.getByText(/Advanced Mode|Geavanceerd/i)).toHaveCount(0);
+  await page.getByRole("button", { name: "Close navigation" }).click();
+  await expect(page.getByRole("heading", { name: "Back-ups samenvoegen" })).toBeVisible();
 });
 
-test("reviews conflicts one at a time with source values, timestamps, and reversible choices", async ({ page }) => {
+test("keeps the output blocked by uncertain publication identities after all displayed choices are made", async ({ page }) => {
   await page.goto("#library-merger");
-  await page.getByRole("radio", { name: "Geavanceerd" }).check();
-  await page.getByLabel("Kies .jwlibrary-bestand als basisversie", { exact: true }).setInputFiles(fixture("base.jwlibrary"));
-  await page.getByLabel("Kies .jwlibrary-bestand A", { exact: true }).setInputFiles(fixture("conflict-source-a.jwlibrary"));
-  await page.getByLabel("Kies .jwlibrary-bestand B", { exact: true }).setInputFiles(fixture("conflict-source-b.jwlibrary"));
-  await page.getByRole("button", { name: "Vergelijk wijzigingen" }).click();
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up A").setInputFiles(fixture("publication-conflicts-a.jwlibrary"));
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up B").setInputFiles(fixture("publication-conflicts-b.jwlibrary"));
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
 
-  const review = page.getByRole("region", { name: "Conflicten beoordelen" });
-  await expect(review.getByText(/Item 1 van/)).toBeVisible();
-  await expect(review.getByRole("region", { name: "Bron A" })).toBeVisible();
-  await expect(review.getByRole("region", { name: "Bron B" })).toBeVisible();
-  await expect(review.getByRole("region", { name: "Basis" })).toBeVisible();
-  await expect(review.getByText(/Archief aangemaakt/).first()).toBeVisible();
-  await expect(review.getByText(/Synthetic note/).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Naar bestand maken" })).toHaveCount(0);
-  await expect(review.getByRole("button", { name: "Vorig conflict" })).toBeDisabled();
-
-  await review.getByRole("group", { name: "Keuze voor dit conflict" }).getByRole("button", { name: "Behoud A" }).click();
-  await expect(review.getByText("Voorlopige keuze: Behoud A")).toBeVisible();
-  await expect(review.getByRole("group", { name: "Keuze voor dit conflict" }).getByRole("button", { name: "Behoud A" })).toHaveAttribute("aria-pressed", "true");
-  const next = review.getByRole("button", { name: "Volgend conflict" });
-  if (await next.isEnabled()) {
-    await next.click();
-    await expect(review.getByText(/Item 2 van/)).toBeVisible();
-    await expect(review.getByRole("button", { name: "Vorig conflict" })).toBeEnabled();
-    await review.getByRole("button", { name: "Vorig conflict" }).click();
-    await expect(review.getByText(/Item 1 van/)).toBeVisible();
-    await review.getByRole("group", { name: "Keuze voor dit conflict" }).getByRole("button", { name: "Behoud B" }).click();
-    await expect(review.getByText("Voorlopige keuze: Behoud B")).toBeVisible();
-    await expect(review.getByRole("group", { name: "Keuze voor dit conflict" }).getByRole("button", { name: "Behoud B" })).toHaveAttribute("aria-pressed", "true");
-  }
+  const cards = page.locator("[class*=conflictCard]");
+  await expect(cards).toHaveCount(2);
+  const alpha = cards.filter({ has: page.getByRole("heading", { name: "Publication Alpha", exact: true }) });
+  const beta = cards.filter({ has: page.getByRole("heading", { name: "Publication Beta", exact: true }) });
+  await expect(page.getByRole("button", { name: "3. Maak mergebestand" })).toHaveCount(0);
+  await alpha.getByRole("button", { name: "Gebruik versie A voor deze publicatie" }).click();
+  await beta.getByRole("button", { name: "Gebruik versie B voor deze publicatie" }).click();
+  await expect(alpha.getByRole("button", { name: "Gebruik versie A voor deze publicatie" })).toHaveAttribute("aria-pressed", "true");
+  await expect(beta.getByRole("button", { name: "Gebruik versie B voor deze publicatie" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText(/Publicatie- of mediaplek/).first()).toBeVisible();
+  await expect(page.getByText(/Voor deze back-ups is nu geen veilig mergebestand beschikbaar/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "3. Maak mergebestand" })).toHaveCount(0);
 });
 
-test("compares note blocks by default, supports line choices, both variants, and explicit manual text", async ({ page }) => {
-  test.setTimeout(60_000);
-  await page.goto("#library-merger");
-  await page.getByRole("radio", { name: "Geavanceerd" }).check();
-  await page.getByLabel("Kies .jwlibrary-bestand als basisversie", { exact: true }).setInputFiles(fixture("base.jwlibrary"));
-  await page.getByLabel("Kies .jwlibrary-bestand A", { exact: true }).setInputFiles(fixture("conflict-source-a.jwlibrary"));
-  await page.getByLabel("Kies .jwlibrary-bestand B", { exact: true }).setInputFiles(fixture("conflict-source-b.jwlibrary"));
-  await page.getByRole("button", { name: "Vergelijk wijzigingen" }).click();
-
-  const review = page.getByRole("region", { name: "Conflicten beoordelen" });
-  await expect(review.getByRole("heading", { name: "Aantekening · Conflict" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Resterende keuzes beoordelen" })).toBeDisabled();
-  const textReview = review.getByRole("region", { name: "Aantekeningstekst samenvoegen" });
-  await expect(textReview.getByRole("button", { name: "Blokken" })).toHaveAttribute("aria-pressed", "true");
-  await expect(textReview.getByText(/overlappende tekstblokken gekozen/)).toBeVisible();
-  await expect(textReview.getByText(/Conflicting edit from source A/).first()).toBeVisible();
-
-  await expect(textReview.getByRole("button", { name: "Neem beide fragmenten op" })).toBeDisabled();
-  await expect(textReview.getByText(/geen bestaand regeleinde tussen de twee tekstwaarden/)).toBeVisible();
-  await textReview.getByRole("button", { name: "Behoud A" }).click();
-  await expect(textReview.getByText("Informatie die deze keuze buiten het blok laat")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Voorlopig informatieverlies" }).getByText(/Behoud A; dit tekstfragment wordt niet meegenomen/)).toBeVisible();
-  await textReview.getByRole("button", { name: "Regels" }).click();
-  await expect(textReview.getByRole("button", { name: "Regels" })).toHaveAttribute("aria-pressed", "true");
-  await textReview.getByRole("button", { name: "Bewerk tekst zelf" }).click();
-  const manualEditor = textReview.getByRole("textbox", { name: "Handmatig samengestelde tekst" });
-  await manualEditor.fill("Zelf gekozen tekst ☀️\nlaatste regel");
-  await expect(textReview.locator("[class*=textSelectionPreview]")).toContainText("Zelf gekozen tekst ☀️");
-  await expect(page.getByRole("region", { name: "Voorlopig informatieverlies" }).getByText(/Handmatige tekst vervangt de bronfragmenten/)).toBeVisible();
-  const firstNextItem = review.getByRole("button", { name: "Volgend conflict" });
-  await expect(firstNextItem).toBeEnabled();
-  await firstNextItem.click();
-  await expect(review.getByText(/Item 2 van/)).toBeVisible();
-  await review.getByRole("button", { name: "Vorig conflict" }).click();
-  await expect(review.getByText(/Item 1 van/)).toBeVisible();
-  await expect(textReview.getByRole("textbox", { name: "Handmatig samengestelde tekst" })).toHaveValue("Zelf gekozen tekst ☀️\nlaatste regel");
-  for (let index = 0; index < 20; index += 1) {
-    const nextItem = review.getByRole("button", { name: "Volgend conflict" });
-    if (!(await nextItem.isEnabled())) break;
-    await nextItem.click();
-    const wholeRecordChoice = review.getByRole("group", { name: "Keuze voor dit conflict" });
-    if (await wholeRecordChoice.count()) await wholeRecordChoice.getByRole("button", { name: "Behoud A" }).click();
-  }
-  await expect(page.getByRole("button", { name: "Besluiten afronden" })).toBeEnabled();
-  await page.getByRole("button", { name: "Besluiten afronden" }).click();
-  await expect(page.getByText(/Alle vereiste beslissingen zijn ingevuld/)).toBeVisible();
-  await expect(review.getByRole("button", { name: "Naar bestand maken" })).toHaveCount(0);
-  for (const width of [375, 768, 1440]) {
-    await page.setViewportSize({ width, height: 900 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-      `horizontal overflow in note review at ${width}px`).toBe(true);
-  }
-});
-
-test("builds and downloads a Simple-mode POC .jwlibrary with an explicit unverified-hash warning", async ({ page }) => {
+test("builds and downloads a Simple-mode POC .jwlibrary with an explicit acceptance warning", async ({ page }) => {
   const requestBodies: string[] = [];
   page.on("request", (request) => {
     const body = request.postData();
     if (body) requestBodies.push(body);
   });
   await page.goto("#library-merger");
-  await page.getByLabel("Kies .jwlibrary-bestand A").setInputFiles(fixture("empty-a.jwlibrary"));
-  await page.getByLabel("Kies .jwlibrary-bestand B").setInputFiles(fixture("empty-b.jwlibrary"));
-  await page.getByRole("button", { name: "Controleer en maak mergeplan" }).click();
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up A").setInputFiles(fixture("empty-a.jwlibrary"));
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up B").setInputFiles(fixture("empty-b.jwlibrary"));
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
 
-  await expect(page.getByText("Keuzes afgerond")).toBeVisible();
+  await expect(page.getByText("Klaar om bestand te maken")).toBeVisible();
+  await expect(page.getByRole("note", { name: "POC-status" })).toBeVisible();
   const sourceDigestsBefore = await selectedSourceDigests(page);
-  await expect(page.getByRole("button", { name: "Naar bestand maken" })).toBeEnabled();
-  await page.getByRole("button", { name: "Naar bestand maken" }).click();
-  await expect(page.getByRole("heading", { name: "Back-up opbouwen en controleren" })).toBeVisible();
-  await page.getByRole("button", { name: "Bestand maken en controleren" }).click();
+  await page.getByRole("button", { name: "3. Maak mergebestand" }).click();
   const pocNotice = page.getByRole("note", { name: "POC-waarschuwing" });
   await expect(pocNotice).toBeVisible();
-  await expect(pocNotice).toContainText(/hash is voorlopig overgenomen uit bron A/i);
-  await expect(pocNotice).toContainText(/acceptatie is niet geverifieerd/i);
+  await expect(pocNotice).toContainText(/JW Library heeft deze back-up nog niet geaccepteerd/i);
   const downloadButton = page.getByRole("button", { name: /Download POC-bestand · JWLibrary-Merged-.*\.jwlibrary/ });
   await expect(downloadButton).toBeEnabled();
   const downloadPromise = page.waitForEvent("download");
@@ -203,57 +187,56 @@ test("builds and downloads a Simple-mode POC .jwlibrary with an explicit unverif
   const inspected = await inspectDownloadedJwLibrary(download);
   expect(inspected.entryNames).toContain("manifest.json");
   expect(inspected.entryNames).toContain(inspected.manifest.userDataBackup?.databaseName);
+  expect(inspected.entryNames).toContain("default_thumbnail.png");
   expect(await selectedSourceDigests(page)).toEqual(sourceDigestsBefore);
-  await expect(page.getByText(/Download gestart: JWLibrary-Merged-/)).toBeVisible();
+  await expect(page.getByText(/Je mergebestand wordt gedownload: JWLibrary-Merged-/)).toBeVisible();
   expect(requestBodies).toEqual([]);
 });
 
-test("builds and downloads a resolved Advanced-mode POC .jwlibrary", async ({ page }) => {
-  const requestBodies: string[] = [];
-  page.on("request", (request) => {
-    const body = request.postData();
-    if (body) requestBodies.push(body);
-  });
+test("handles invalid input, restarting, replacing a backup, and comparing again", async ({ page }) => {
   await page.goto("#library-merger");
-  await page.getByRole("radio", { name: "Geavanceerd" }).check();
-  await page.getByLabel("Kies .jwlibrary-bestand A", { exact: true }).setInputFiles(fixture("empty-a.jwlibrary"));
-  await page.getByLabel("Kies .jwlibrary-bestand B", { exact: true }).setInputFiles(fixture("empty-b.jwlibrary"));
-  await page.getByRole("button", { name: "Vergelijk wijzigingen" }).click();
+  const inputA = page.getByLabel("Kies een .jwlibrary-bestand voor Back-up A");
+  const inputB = page.getByLabel("Kies een .jwlibrary-bestand voor Back-up B");
+  await inputA.setInputFiles(fixture("empty-a.jwlibrary"));
+  await inputB.setInputFiles(fixture("missing-manifest.jwlibrary"));
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
+  await expect(page.locator("#library-source-b-status")).toContainText(/manifest|bestand/i);
+  await expect(page.getByRole("heading", { name: "Resultaat van de vergelijking" })).toHaveCount(0);
 
-  await expect(page.getByRole("heading", { name: "Driewegvergelijking" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Besluiten afronden" })).toBeEnabled();
-  await expect(page.getByRole("region", { name: "Voorlopig informatieverlies" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Naar bestand maken" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Besluiten afronden" }).click();
-  await expect(page.getByText(/De keuzes zijn veilig vertaald naar een databaseplan/)).toBeVisible();
-  const sourceDigestsBefore = await selectedSourceDigests(page);
-  await expect(page.getByRole("button", { name: "Naar bestand maken" })).toBeEnabled();
-  await page.getByRole("button", { name: "Naar bestand maken" }).click();
-  await page.getByRole("button", { name: "Bestand maken en controleren" }).click();
+  await expect(inputB).toBeEnabled();
+  await inputB.setInputFiles(fixture("empty-b.jwlibrary"));
+  await expect(page.locator("#library-source-b-status")).toContainText("Geselecteerd, nog niet gecontroleerd.");
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
+  await expect(page.getByRole("heading", { name: "Resultaat van de vergelijking" })).toBeVisible();
+  await page.getByRole("button", { name: "Opnieuw beginnen" }).click();
+  await expect(page.getByRole("heading", { name: "Resultaat van de vergelijking" })).toHaveCount(0);
+  await expect(inputA).toBeVisible();
+  await expect(page.getByRole("button", { name: "Vergelijk back-ups" })).toBeEnabled();
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
+  await expect(page.getByRole("heading", { name: "Resultaat van de vergelijking" })).toBeVisible();
 
-  const pocNotice = page.getByRole("note", { name: "POC-waarschuwing" });
-  await expect(pocNotice).toBeVisible();
-  await expect(pocNotice).toContainText(/hash is voorlopig overgenomen uit bron A/i);
+  await page.getByRole("button", { name: "3. Maak mergebestand" }).click();
   const downloadButton = page.getByRole("button", { name: /Download POC-bestand · JWLibrary-Merged-.*\.jwlibrary/ });
   await expect(downloadButton).toBeEnabled();
   const downloadPromise = page.waitForEvent("download");
   await downloadButton.click();
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/^JWLibrary-Merged-\d{4}-\d{2}-\d{2}\.jwlibrary$/);
-  const inspected = await inspectDownloadedJwLibrary(download);
-  expect(inspected.entryNames).toContain("manifest.json");
-  expect(inspected.entryNames).toContain(inspected.manifest.userDataBackup?.databaseName);
-  expect(await selectedSourceDigests(page)).toEqual(sourceDigestsBefore);
-  await expect(page.getByText(/Download gestart: JWLibrary-Merged-/)).toBeVisible();
-  expect(requestBodies).toEqual([]);
+  await downloadPromise;
+  await expect(page.getByText(/Je mergebestand wordt gedownload:/)).toBeVisible();
+
+  await inputB.setInputFiles(fixture("empty-a.jwlibrary"));
+  await expect(page.getByRole("heading", { name: "Resultaat van de vergelijking" })).toHaveCount(0);
+  await expect(page.getByText(/Je mergebestand wordt gedownload:/)).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Mergebestand maken" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
+  await expect(page.getByRole("heading", { name: "Resultaat van de vergelijking" })).toBeVisible();
 });
 
 test("keeps source labels, validation messages, keyboard file selection, and both themes accessible", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("#library-merger");
 
-  const inputA = page.getByLabel("Kies .jwlibrary-bestand A");
-  const inputB = page.getByLabel("Kies .jwlibrary-bestand B");
+  const inputA = page.getByLabel("Kies een .jwlibrary-bestand voor Back-up A");
+  const inputB = page.getByLabel("Kies een .jwlibrary-bestand voor Back-up B");
   await expect(inputA).toHaveAttribute("aria-describedby", "library-source-a-status");
   await expect(inputB).toHaveAttribute("aria-describedby", "library-source-b-status");
 
@@ -265,7 +248,7 @@ test("keeps source labels, validation messages, keyboard file selection, and bot
   await inputB.setInputFiles(fixture("missing-manifest.jwlibrary"));
 
   await expect(page.locator("#library-source-a-status")).toHaveAttribute("aria-live", "polite");
-  await page.getByRole("button", { name: "Controleer en maak mergeplan" }).click();
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
   await expect(page.locator("#library-source-b-status")).toContainText(/manifest|bestand/i);
   await expect(page.locator("#library-source-b-status")).toHaveAttribute("role", "status");
 
@@ -282,9 +265,117 @@ test("keeps source labels, validation messages, keyboard file selection, and bot
     if (await closeNavigation.isVisible()) await closeNavigation.click();
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      await expect(page.getByRole("heading", { name: "JW Library Merger" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Back-ups samenvoegen" })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         `horizontal overflow in ${theme.label} at ${width}px`).toBe(true);
     }
+  }
+});
+
+test("supports keyboard conflict choices, announces updated status, and keeps conflict layouts readable", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.goto("#library-merger");
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up A").setInputFiles(fixture("publication-conflicts-a.jwlibrary"));
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up B").setInputFiles(fixture("publication-conflicts-b.jwlibrary"));
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
+
+  const cards = page.locator("[class*=conflictCard]");
+  await expect(cards).toHaveCount(2);
+  const alpha = cards.filter({ has: page.getByRole("heading", { name: "Publication Alpha", exact: true }) });
+  const chooseA = alpha.getByRole("button", { name: "Gebruik versie A voor deze publicatie" });
+  const chooseB = alpha.getByRole("button", { name: "Gebruik versie B voor deze publicatie" });
+  const liveSummary = page.getByRole("status").filter({ hasText: "Vergelijking afgerond" });
+  await expect(liveSummary).toHaveAttribute("aria-live", "polite");
+  await expect(liveSummary).toContainText("2 keuzes nodig");
+
+  // Use real keyboard navigation and activation, then verify a visible focus ring.
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).focus();
+  for (let tab = 0; tab < 40 && !(await chooseA.evaluate((element) => element === document.activeElement)); tab += 1) {
+    await page.keyboard.press("Tab");
+  }
+  await expect(chooseA).toBeFocused();
+  const focusStyle = await chooseA.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth, offset: style.outlineOffset };
+  });
+  expect(focusStyle).toEqual({ outlineStyle: "solid", outlineWidth: "3px", offset: "3px" });
+  await page.keyboard.press("Enter");
+  await expect(chooseA).toHaveAttribute("aria-pressed", "true");
+  await expect(liveSummary).toContainText("1 keuze nodig");
+
+  for (const viewport of [
+    { width: 375, height: 900, columns: 1 },
+    { width: 768, height: 1024, columns: 2 },
+    { width: 1440, height: 900, columns: 2 },
+  ]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      `horizontal overflow at ${viewport.width}px`).toBe(true);
+    const sourceColumns = await alpha.locator("[class*=conflictSources]").first().evaluate((element) =>
+      getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    );
+    expect(sourceColumns, `conflict comparison columns at ${viewport.width}px`).toBe(viewport.columns);
+    const cardWidth = await alpha.evaluate((element) => element.getBoundingClientRect().width);
+    const actionWidths = await alpha.locator("[class*=conflictActions] button").evaluateAll((buttons) =>
+      buttons.map((button) => (button as HTMLElement).getBoundingClientRect().width),
+    );
+    expect(actionWidths).toHaveLength(2);
+    expect(actionWidths.every((width) => width > 0 && width <= cardWidth),
+      `A/B controls fit within conflict card at ${viewport.width}px`).toBe(true);
+    await expect(chooseA).toBeVisible();
+    await expect(chooseB).toBeVisible();
+  }
+
+  // Confirm the semantic foreground/background styles resolve in both themes.
+  for (const theme of ["light", "dark"] as const) {
+    const openNavigation = page.getByRole("button", { name: "Open navigation" });
+    if (await openNavigation.isVisible()) await openNavigation.click();
+    await page.getByRole("button", { name: theme === "light" ? "Use light theme" : "Use dark theme" }).click();
+    const themeStyles = await alpha.evaluate((element) => {
+      const card = getComputedStyle(element);
+      const heading = getComputedStyle(element.querySelector("h4")!);
+      const decision = getComputedStyle(element.querySelector("button[aria-pressed='true']")!);
+      const canvasColor = getComputedStyle(document.documentElement).getPropertyValue("--color-canvas").trim();
+      const parseColor = (value: string) => {
+        const [r = 0, g = 0, b = 0, alpha = 1] = value.match(/[\d.]+/g)?.map(Number) ?? [];
+        return { r, g, b, alpha };
+      };
+      const composite = (foreground: string, background: string) => {
+        const fg = parseColor(foreground);
+        const bg = parseColor(background);
+        const alpha = fg.alpha + bg.alpha * (1 - fg.alpha);
+        return `rgb(${[fg.r, fg.g, fg.b].map((channel, index) => {
+          const under = [bg.r, bg.g, bg.b][index] ?? 0;
+          return Math.round((channel * fg.alpha + under * bg.alpha * (1 - fg.alpha)) / alpha);
+        }).join(" ")})`;
+      };
+      const luminance = (value: string) => {
+        const channels = parseColor(value);
+        const linear = [channels.r, channels.g, channels.b].map((channel) => {
+          const normalized = channel / 255;
+          return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * (linear[0] ?? 0) + 0.7152 * (linear[1] ?? 0) + 0.0722 * (linear[2] ?? 0);
+      };
+      const contrast = (foreground: string, background: string) => {
+        const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+        return ((values[0] ?? 0) + 0.05) / ((values[1] ?? 0) + 0.05);
+      };
+      const cardSurface = composite(card.backgroundColor, canvasColor);
+      const selectedSurface = composite(decision.backgroundColor, cardSurface);
+      return {
+        cardBackground: card.backgroundColor,
+        headingColor: heading.color,
+        selectedBackground: decision.backgroundColor,
+        selectedText: decision.color,
+        focusColor: decision.outlineColor,
+        headingContrast: contrast(heading.color, cardSurface),
+        selectedTextContrast: contrast(decision.color, selectedSurface),
+        focusContrast: contrast(decision.outlineColor, selectedSurface),
+      };
+    });
+    expect(themeStyles.headingContrast, `heading contrast in ${theme} theme`).toBeGreaterThanOrEqual(4.5);
+    expect(themeStyles.selectedTextContrast, `selected A/B text contrast in ${theme} theme`).toBeGreaterThanOrEqual(4.5);
+    expect(themeStyles.focusContrast, `focus ring contrast in ${theme} theme`).toBeGreaterThanOrEqual(3);
   }
 });
