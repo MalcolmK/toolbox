@@ -4,7 +4,6 @@
 
 - Regenerated the npm lockfile from `package.json`, including all optional Rolldown platform bindings such as the Linux x64 GNU binding required by GitHub Actions; npm refreshed transitive versions within the existing dependency ranges.
 - Updated checkout and setup-node actions in the browser-test and GitHub Pages workflows to v7, and aligned both workflows on Node.js 22.23.3.
-- Verified locally with Node.js 22.23.3: clean `npm ci`, production build, all 114 unit tests, and all 21 Playwright runs passed (seven each in Chromium, Microsoft Edge, and WebKit). GitHub Actions runs remain to be confirmed after the changes are pushed.
 
 ## 0.2.0 — 2026-10-14
 
