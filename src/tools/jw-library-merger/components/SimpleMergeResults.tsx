@@ -1,6 +1,7 @@
 import type { SqlValue } from "sql.js";
 import type { SimpleMergePreview } from "../merge/prepareSimpleMerge";
 import type { MergeRowCandidate, SimpleMergeReport } from "../merge/simpleMerge";
+import { getPublicationConflictGroups, type PublicationConflictGroup } from "../merge/publicationConflicts";
 import styles from "./LibraryMergerPage.module.css";
 
 const tableLabels: Readonly<Record<string, string>> = {
@@ -51,20 +52,29 @@ function noteTitle(source: MergeRowCandidate | null): string | null {
   return typeof title === "string" && title.trim() ? title : null;
 }
 
-export function SimpleMergeResults({ preview }: { readonly preview: SimpleMergePreview }) {
+export function SimpleMergeResults({
+  preview,
+  reviewChoices,
+  onChoosePublicationVersion,
+}: {
+  readonly preview: SimpleMergePreview;
+  readonly reviewChoices: ReadonlyMap<string, "A" | "B">;
+  readonly onChoosePublicationVersion: (group: PublicationConflictGroup, source: "A" | "B") => void;
+}) {
   const { differenceReport, mergePlan } = preview;
   const counts = differenceReport.summary;
   const losses = mergePlan.report.informationLoss;
   const unresolved: SimpleMergeReport["unresolved"] = mergePlan.report.unresolved;
   const selectedA = mergePlan.report.choices.filter((choice) => choice.selectedSource === "A").length;
   const selectedB = mergePlan.report.choices.filter((choice) => choice.selectedSource === "B").length;
+  const publicationConflicts = getPublicationConflictGroups(preview, reviewChoices);
 
   return (
     <section className={styles.results} aria-labelledby="merge-results-heading">
       <div className={styles.resultsHeading}>
         <div>
-          <h2 id="merge-results-heading">Vergelijking en mergeplan</h2>
-          <p>De back-ups zijn lokaal verwerkt. De bronbestanden zijn niet gewijzigd.</p>
+          <h2 id="merge-results-heading">2. Resultaat van de vergelijking</h2>
+          <p>Je originele back-ups zijn niet gewijzigd.</p>
         </div>
         <span className={mergePlan.status === "ready" ? styles.readyBadge : styles.reviewBadge}>
           {mergePlan.status === "ready" ? "Keuzes afgerond" : "Controle nodig"}
@@ -80,8 +90,10 @@ export function SimpleMergeResults({ preview }: { readonly preview: SimpleMergeP
         ))}
       </div>
 
-      <section aria-labelledby="timestamps-heading">
-        <h3 id="timestamps-heading">Tijdstempels uit de back-ups</h3>
+      <details className={styles.differenceDetails}>
+        <summary>Tijdstempels en technische details bekijken</summary>
+        <section aria-labelledby="timestamps-heading">
+        <h3 id="timestamps-heading">Tijdstempels</h3>
         <ul className={styles.detailList}>
           {differenceReport.sources.flatMap((source) => source.timestamps.map((timestamp) => (
             <li key={`${source.label}-${timestamp.label}-${timestamp.recordLabel ?? "source"}`}>
@@ -99,14 +111,15 @@ export function SimpleMergeResults({ preview }: { readonly preview: SimpleMergeP
             ))}
           </ul>
         )}
-      </section>
+        </section>
+      </details>
 
       <section aria-labelledby="difference-summary-heading">
         <h3 id="difference-summary-heading">Verschillen</h3>
         <dl className={styles.summaryGrid}>
           <div><dt>Gelijk</dt><dd>{counts.equal}</dd></div>
-          <div><dt>Alleen in A</dt><dd>{counts.onlyInA}</dd></div>
-          <div><dt>Alleen in B</dt><dd>{counts.onlyInB}</dd></div>
+          <div><dt>Alleen in back-up A</dt><dd>{counts.onlyInA}</dd></div>
+          <div><dt>Alleen in back-up B</dt><dd>{counts.onlyInB}</dd></div>
           <div><dt>Gewijzigd</dt><dd>{counts.changed}</dd></div>
           <div><dt>Mogelijk conflict</dt><dd>{counts.possibleConflicts}</dd></div>
           <div><dt>Onzeker gekoppeld</dt><dd>{counts.uncertain}</dd></div>
@@ -114,20 +127,80 @@ export function SimpleMergeResults({ preview }: { readonly preview: SimpleMergeP
       </section>
 
       <section aria-labelledby="plan-summary-heading">
-        <h3 id="plan-summary-heading">Simpele modus</h3>
+        <h3 id="plan-summary-heading">Wat wordt meegenomen</h3>
         <p className={styles.planSummary}>
-          {selectedA} keuze(s) uit A, {selectedB} keuze(s) uit B, {unresolved.length} onopgelost(e) gegeven(s),
-          {` ${losses.length} verschil(len) met een niet-behouden waarde.`}
+          {selectedA} keuze(s) uit back-up A en {selectedB} uit back-up B.
+          {unresolved.length === 0
+            ? ` Geen open keuzes${losses.length ? `; ${losses.length} waarde(s) worden niet meegenomen` : ""}.`
+            : ` ${unresolved.length} open keuze(s); het mergebestand is daarom nog niet beschikbaar.`}
         </p>
         {mergePlan.report.warnings.length > 0 && (
-          <ul className={styles.warningList} aria-label="Waarschuwingen">
+          <ul className={styles.warningList} aria-label="Aandachtspunten">
             {mergePlan.report.warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}
           </ul>
         )}
       </section>
 
-      <section aria-labelledby="information-loss-heading">
-        <h3 id="information-loss-heading">Niet-behouden informatie ({losses.length})</h3>
+      {publicationConflicts.length > 0 && (
+        <section className={styles.conflictReview} aria-labelledby="publication-conflicts-heading">
+          <div>
+            <h3 id="publication-conflicts-heading">Kies per publicatie welke versie je wilt</h3>
+            <p className={styles.planSummary}>Vergelijk de verschillen en kies back-up A of B. Je keuze geldt voor de conflicten binnen die publicatie.</p>
+          </div>
+          {publicationConflicts.map((group) => (
+            <article className={styles.conflictCard} key={group.key}>
+              <h4>{group.label}</h4>
+              <p className={styles.planSummary}>Kies één versie voor alle conflicten die hieronder bij deze publicatie horen.</p>
+              {group.differences.map((item) => (
+                <div className={styles.publicationDifference} key={item.recordKey}>
+                  <strong>{item.label}</strong>
+                  <div className={styles.conflictSources}>
+                    {(["A", "B"] as const).map((source) => {
+                      const fields = item.fields.filter((field) => field.valueA !== field.valueB);
+                      return (
+                        <div className={styles.sourceEvidence} key={source}>
+                          <h5>Back-up {source}</h5>
+                          {fields.length > 0 ? fields.map((field) => (
+                            <p key={field.field}>
+                              <strong>{field.field}:</strong> <ValueDisclosure
+                                label={`back-up ${source}`}
+                                value={source === "A" ? field.valueA : field.valueB}
+                              />
+                            </p>
+                          )) : <p>Geen losse veldverschillen beschikbaar.</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              <div className={styles.conflictActions}>
+                <button
+                  className={reviewChoices.get(group.recordKeys[0]!) === "A" ? styles.selectedDecision : styles.actionButton}
+                  type="button"
+                  aria-pressed={reviewChoices.get(group.recordKeys[0]!) === "A"}
+                  onClick={() => onChoosePublicationVersion(group, "A")}
+                >
+                  Gebruik versie A voor deze publicatie
+                </button>
+                <button
+                  className={reviewChoices.get(group.recordKeys[0]!) === "B" ? styles.selectedDecision : styles.actionButton}
+                  type="button"
+                  aria-pressed={reviewChoices.get(group.recordKeys[0]!) === "B"}
+                  onClick={() => onChoosePublicationVersion(group, "B")}
+                >
+                  Gebruik versie B voor deze publicatie
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
+      <details className={styles.differenceDetails}>
+        <summary>Bekijk niet-meegenomen informatie ({losses.length})</summary>
+        <section aria-labelledby="information-loss-heading">
+        <h3 id="information-loss-heading">Niet-meegenomen informatie ({losses.length})</h3>
         {losses.length === 0 ? (
           <p className={styles.emptyMessage}>Er zijn geen afzonderlijke veldwaarden gemeld als niet-behouden.</p>
         ) : (
@@ -146,9 +219,12 @@ export function SimpleMergeResults({ preview }: { readonly preview: SimpleMergeP
             ))}
           </ul>
         )}
-      </section>
+        </section>
+      </details>
 
-      <section aria-labelledby="unresolved-heading">
+      <details className={styles.differenceDetails} open={unresolved.length > 0}>
+        <summary>Bekijk open keuzes en onzekerheden ({unresolved.length})</summary>
+        <section aria-labelledby="unresolved-heading">
         <h3 id="unresolved-heading">Onzekerheden en open keuzes ({unresolved.length})</h3>
         {unresolved.length === 0 ? (
           <p className={styles.emptyMessage}>Alle mergekeuzes zijn op basis van de beschikbare informatie opgelost.</p>
@@ -163,7 +239,8 @@ export function SimpleMergeResults({ preview }: { readonly preview: SimpleMergeP
             ))}
           </ul>
         )}
-      </section>
+        </section>
+      </details>
 
       {differenceReport.records.length > 0 && (
         <details className={styles.differenceDetails}>

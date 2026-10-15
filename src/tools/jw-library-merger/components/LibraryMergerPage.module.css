@@ -97,6 +97,18 @@
   line-height: var(--line-height-body);
 }
 
+.notReadyNotice {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-card);
+  color: var(--color-text-primary);
+}
+
+.notReadyNotice p { margin: 0; color: var(--color-text-secondary); line-height: var(--line-height-body); }
+
 .sourceGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -368,6 +380,9 @@
   overflow-wrap: anywhere;
 }
 
+.differenceDetails > section { margin-top: var(--space-3); }
+.differenceDetails > section h3 { margin-top: 0; }
+
 .buildStage {
   display: grid;
   gap: var(--space-3);
@@ -397,6 +412,8 @@
 .reviewTitle p { margin-top: var(--space-1); color: var(--color-text-secondary); }
 .conflictCard { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-border-strong); border-radius: var(--radius-card); background: var(--color-surface-card); }
 .conflictCard h4, .conflictCard p { margin: 0; }
+.publicationDifference { display: grid; gap: var(--space-2); }
+.publicationDifference > strong { color: var(--color-text-primary); }
 .conflictCard h4 { color: var(--color-text-primary); }
 .conflictCard > p { color: var(--color-text-secondary); line-height: var(--line-height-body); overflow-wrap: anywhere; }
 .conflictPrompt { font-weight: 600; }
@@ -413,6 +430,7 @@
 .conflictActions > p { flex-basis: 100%; }
 .selectedDecision { min-height: 3rem; padding: var(--space-2) var(--space-4); border: 2px solid var(--color-accent); border-radius: var(--radius-control); background: var(--color-accent-soft); color: var(--color-text-primary); font: inherit; font-weight: 650; cursor: pointer; }
 .selectedDecision:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+.conflictActions .actionButton, .conflictActions .selectedDecision { min-height: 2.75rem; }
 .choiceStatus { padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); background: var(--color-surface-selected); }
 .noteTextReview { display: grid; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border-subtle); }
 .noteTextHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }

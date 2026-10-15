@@ -1,18 +1,10 @@
-import { useCallback, useRef, useState, type Ref } from "react";
-import { buildAdvancedPocJwLibrary } from "../archive/buildAdvancedPocJwLibrary";
+import { useRef, useState, type Ref } from "react";
 import { buildSimplePocJwLibrary } from "../archive/buildSimplePocJwLibrary";
 import type { JwLibraryWriteResult } from "../archive/writeJwLibrary";
 import type { SimpleMergeResult } from "../merge/simpleMerge";
-import {
-  AdvancedMergeInputError,
-  prepareAdvancedMerge,
-  SimpleMergeInputError,
-  prepareSimpleMerge,
-  type AdvancedMergePreview,
-  type MergeInputCheck,
-  type SimpleMergePreview,
-} from "../merge/prepareSimpleMerge";
-import { AdvancedMergeResults } from "./AdvancedMergeResults";
+import { simpleMerge } from "../merge/simpleMerge";
+import { SimpleMergeInputError, prepareSimpleMerge, type MergeInputCheck, type SimpleMergePreview } from "../merge/prepareSimpleMerge";
+import type { PublicationConflictGroup } from "../merge/publicationConflicts";
 import { ArchiveDownload, type ArchiveDownloadSummary } from "./ArchiveDownload";
 import { SimpleMergeResults } from "./SimpleMergeResults";
 import { SourceFilePicker } from "./SourceFilePicker";
@@ -39,24 +31,21 @@ function createDownloadSummary(plan: SimpleMergeResult): ArchiveDownloadSummary 
     recordCount: plan.records.length,
     recordsByTable,
     choices: plan.report.choices.map((choice) =>
-      `${choice.tableName}: ${choice.selectedSource ? `bron ${choice.selectedSource}` : "geen bron geselecteerd"}; ${choice.reason}`),
+      `${choice.tableName}: ${choice.selectedSource ? `back-up ${choice.selectedSource}` : "geen bron geselecteerd"}; ${choice.reason}`),
     uncertainties: [
       ...plan.report.warnings,
       ...plan.report.unresolved.map((record) => `${record.tableName}: ${record.reason}`),
     ],
     omissions: plan.report.informationLoss.map((loss) =>
-      `${loss.tableName}.${loss.field}: waarde uit bron ${loss.omittedFrom} niet meegenomen: ${formatOmittedValue(loss.valueNotRetained)} (${loss.reason})`),
+      `${loss.tableName}.${loss.field}: waarde uit back-up ${loss.omittedFrom} niet meegenomen: ${formatOmittedValue(loss.valueNotRetained)} (${loss.reason})`),
   };
 }
 
 export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMergerPageProps) {
   const [files, setFiles] = useState<FilePair>([null, null]);
   const [checks, setChecks] = useState<CheckPair>([null, null]);
-  const [baseFile, setBaseFile] = useState<File | null>(null);
-  const [baseCheck, setBaseCheck] = useState<MergeInputCheck | null>(null);
-  const [simplePreview, setSimplePreview] = useState<SimpleMergePreview | null>(null);
-  const [advancedPreview, setAdvancedPreview] = useState<AdvancedMergePreview | null>(null);
-  const [advancedMergePlan, setAdvancedMergePlan] = useState<SimpleMergeResult | null>(null);
+  const [preview, setPreview] = useState<SimpleMergePreview | null>(null);
+  const [reviewChoices, setReviewChoices] = useState<Map<string, "A" | "B">>(() => new Map());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [buildStageOpen, setBuildStageOpen] = useState(false);
@@ -64,27 +53,13 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
   const [archiveWriteResult, setArchiveWriteResult] = useState<JwLibraryWriteResult | null>(null);
   const [archiveBuildError, setArchiveBuildError] = useState<string | null>(null);
   const buildGeneration = useRef(0);
-  const [mode, setMode] = useState<"simple" | "advanced">("simple");
   const canCompare = files[0] !== null && files[1] !== null && !busy;
-  const activePreview = mode === "simple" ? simplePreview : null;
-  const activePlan = mode === "simple" ? simplePreview?.mergePlan ?? null : advancedMergePlan;
-
-  const handleAdvancedPlanChange = useCallback((plan: SimpleMergeResult) => {
-    setAdvancedMergePlan(plan);
-    if (plan.status !== "ready") {
-      buildGeneration.current += 1;
-      setBuildStageOpen(false);
-      setBuildingArchive(false);
-      setArchiveWriteResult(null);
-      setArchiveBuildError(null);
-    }
-  }, []);
+  const activePlan = preview?.mergePlan ?? null;
 
   const clearResults = () => {
     buildGeneration.current += 1;
-    setSimplePreview(null);
-    setAdvancedPreview(null);
-    setAdvancedMergePlan(null);
+    setPreview(null);
+    setReviewChoices(new Map());
     setError(null);
     setBuildStageOpen(false);
     setBuildingArchive(false);
@@ -106,12 +81,6 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
     clearResults();
   };
 
-  const chooseBaseFile = (file: File | null) => {
-    setBaseFile(file);
-    setBaseCheck(null);
-    clearResults();
-  };
-
   const compareFiles = async () => {
     const [fileA, fileB] = files;
     if (!fileA || !fileB) return;
@@ -119,52 +88,28 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
     setBusy(true);
     buildGeneration.current += 1;
     setError(null);
-    setSimplePreview(null);
-    setAdvancedPreview(null);
-    setAdvancedMergePlan(null);
+    setPreview(null);
+    setReviewChoices(new Map());
     setBuildStageOpen(false);
     setBuildingArchive(false);
     setArchiveWriteResult(null);
     setArchiveBuildError(null);
     setChecks([null, null]);
-    if (baseFile) setBaseCheck(null);
 
     try {
-      if (mode === "advanced") {
-        const result = await prepareAdvancedMerge(fileA, fileB, baseFile);
-        setAdvancedPreview(result);
-        setChecks([
-          { source: "A", fileName: fileA.name, valid: true, schemaVersion: result.sources[0].schemaVersion, error: null },
-          { source: "B", fileName: fileB.name, valid: true, schemaVersion: result.sources[1].schemaVersion, error: null },
-        ]);
-        setBaseCheck(result.baseSource ? {
-          source: "basis",
-          fileName: result.baseSource.fileName,
-          valid: true,
-          schemaVersion: result.baseSource.schemaVersion,
-          error: null,
-        } : null);
-      } else {
-        const result = await prepareSimpleMerge(fileA, fileB);
-        setSimplePreview(result);
-        setChecks([
-          { source: "A", fileName: fileA.name, valid: true, schemaVersion: result.sources[0].schemaVersion, error: null },
-          { source: "B", fileName: fileB.name, valid: true, schemaVersion: result.sources[1].schemaVersion, error: null },
-        ]);
-      }
+      const result = await prepareSimpleMerge(fileA, fileB);
+      setPreview(result);
+      setChecks([
+        { source: "A", fileName: fileA.name, valid: true, schemaVersion: result.sources[0].schemaVersion, error: null },
+        { source: "B", fileName: fileB.name, valid: true, schemaVersion: result.sources[1].schemaVersion, error: null },
+      ]);
     } catch (cause) {
       if (cause instanceof SimpleMergeInputError) {
         setChecks([...cause.checks]);
-      } else if (cause instanceof AdvancedMergeInputError) {
-        for (const check of cause.checks) {
-          if (check.source === "basis") setBaseCheck(check);
-          if (check.source === "A") setChecks(([ , b]) => [check, b]);
-          if (check.source === "B") setChecks(([a]) => [a, check]);
-        }
       } else {
         setError(cause instanceof Error
           ? cause.message
-          : "De bestanden konden niet worden vergeleken. Probeer het opnieuw.");
+          : "De back-ups konden niet worden vergeleken. Controleer de bestanden en probeer het opnieuw.");
       }
     } finally {
       setBusy(false);
@@ -172,27 +117,37 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
   };
 
   const buildArchive = async () => {
-    if (!activePlan || activePlan.status !== "ready") return;
+    if (!preview || !activePlan || activePlan.status !== "ready") return;
     const generation = ++buildGeneration.current;
     setBuildStageOpen(true);
     setBuildingArchive(true);
     setArchiveWriteResult(null);
     setArchiveBuildError(null);
     try {
-      const result = mode === "simple" && simplePreview
-        ? await buildSimplePocJwLibrary(simplePreview)
-        : mode === "advanced" && advancedPreview
-          ? await buildAdvancedPocJwLibrary(advancedPreview, activePlan)
-          : null;
-      if (!result) return;
+      const result = await buildSimplePocJwLibrary(preview);
       if (generation === buildGeneration.current) setArchiveWriteResult(result);
     } catch (cause) {
       if (generation === buildGeneration.current) {
-        setArchiveBuildError(cause instanceof Error ? cause.message : "Het archief kon niet veilig worden opgebouwd.");
+        setArchiveBuildError(cause instanceof Error ? cause.message : "Het mergebestand kon niet veilig worden opgebouwd.");
       }
     } finally {
       if (generation === buildGeneration.current) setBuildingArchive(false);
     }
+  };
+
+  const choosePublicationVersion = (group: PublicationConflictGroup, source: "A" | "B") => {
+    if (!preview) return;
+    const nextChoices = new Map(reviewChoices);
+    for (const key of group.recordKeys) nextChoices.set(key, source);
+    setReviewChoices(nextChoices);
+    setPreview({
+      ...preview,
+      mergePlan: simpleMerge(preview.sources[0].snapshot, preview.sources[1].snapshot, nextChoices),
+    });
+    setBuildStageOpen(false);
+    setBuildingArchive(false);
+    setArchiveWriteResult(null);
+    setArchiveBuildError(null);
   };
 
   const closeBuildStage = () => {
@@ -203,92 +158,65 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
     setBuildStageOpen(false);
   };
 
-  const changeMode = (nextMode: "simple" | "advanced") => {
-    setMode(nextMode);
-    clearResults();
-  };
-
   return (
     <section className={`${surfaceClassName} ${styles.page}`} aria-labelledby="workflow-heading">
       <div className={styles.heading}>
-        <h1 id="workflow-heading" ref={headingRef} tabIndex={-1}>JW Library Merger</h1>
-        <p>Kies twee back-ups. De bestanden worden alleen in deze browser verwerkt.</p>
+        <h1 id="workflow-heading" ref={headingRef} tabIndex={-1}>Back-ups samenvoegen</h1>
+        <p>Kies twee JW Library-back-ups. Je bestanden blijven op dit apparaat.</p>
       </div>
-
-      <fieldset className={styles.modeFieldset}>
-        <legend>Merger-modus</legend>
-        <label className={styles.modeOption}>
-          <input type="radio" name="merge-mode" value="simple" checked={mode === "simple"} onChange={() => changeMode("simple")} />
-          <span>Simpel</span>
-        </label>
-        <label className={styles.modeOption}>
-          <input type="radio" name="merge-mode" value="advanced" checked={mode === "advanced"} onChange={() => changeMode("advanced")} />
-          <span>Geavanceerd</span>
-        </label>
-        <p id="advanced-mode-note" className={styles.modeHint}>
-          Geavanceerd vergelijkt A en B optioneel met een oudere basisversie. Zonder basis worden conflicten als mogelijk gemarkeerd.
-        </p>
-      </fieldset>
 
       <div className={styles.sectionHeading}>
         <div>
-          <h2>Bronbestanden</h2>
-          <p>Kies elk bestand bij de juiste bron. A en B zijn de twee versies die je later kunt samenvoegen.</p>
+          <h2>1. Kies je back-ups</h2>
+          <p>De volgorde maakt niet uit. Beide bestanden worden eerst gecontroleerd.</p>
         </div>
       </div>
 
-      <div className={`${styles.sourceGrid} ${mode === "advanced" ? styles.sourceGridAdvanced : ""}`}>
-        {mode === "advanced" && (
-          <SourceFilePicker source="basis" file={baseFile} check={baseCheck} busy={busy} onChoose={chooseBaseFile} />
-        )}
+      <div className={styles.sourceGrid}>
         <SourceFilePicker source="A" file={files[0]} check={checks[0]} busy={busy} onChoose={(file) => chooseFile(0, file)} />
         <SourceFilePicker source="B" file={files[1]} check={checks[1]} busy={busy} onChoose={(file) => chooseFile(1, file)} />
       </div>
 
       <div className={styles.actions}>
         <button className={styles.actionButton} type="button" disabled={!canCompare} onClick={() => void compareFiles()}>
-          {busy ? "Bestanden controleren en vergelijken…" : mode === "advanced" ? "Vergelijk wijzigingen" : "Controleer en maak mergeplan"}
+          {busy ? "Back-ups controleren…" : "2. Vergelijk en maak merge"}
         </button>
-        {(simplePreview || advancedPreview) && (
-          <button className={styles.clearFileButton} type="button" onClick={clearResults}>Resultaat wissen</button>
-        )}
+        {preview && <button className={styles.clearFileButton} type="button" onClick={clearResults}>Opnieuw beginnen</button>}
       </div>
 
       {error && <p className={styles.globalError} role="alert">{error}</p>}
 
-      {activePreview && (
+      {preview && (
         <>
-          <SimpleMergeResults preview={activePreview} />
-          {activePreview.mergePlan.status === "needs-review" && (
-            <p className={styles.notReadyNotice} role="status">
-              De bestandsstap is geblokkeerd zolang er onopgeloste identiteiten, koppelingen of keuzes zijn.
-              Los die later op in de geavanceerde modus.
-            </p>
+          <SimpleMergeResults preview={preview} reviewChoices={reviewChoices} onChoosePublicationVersion={choosePublicationVersion} />
+          {activePlan?.status === "needs-review" && (
+            <div className={styles.notReadyNotice} role="status">
+              <strong>Voor deze back-ups is nu geen veilig mergebestand beschikbaar.</strong>
+              <p>Een of meer gegevens kunnen niet betrouwbaar aan elkaar worden gekoppeld of automatisch gekozen. Bekijk de open punten hieronder. Simple Mode maakt geen bestand zolang die onzekerheden bestaan.</p>
+            </div>
           )}
         </>
       )}
-      {mode === "advanced" && advancedPreview && <AdvancedMergeResults preview={advancedPreview} onPlanChange={handleAdvancedPlanChange} />}
+
       {activePlan?.status === "ready" && !buildStageOpen && (
         <div className={styles.actions}>
-          <button className={styles.actionButton} type="button" onClick={() => setBuildStageOpen(true)}>
-            Naar bestand maken
+          <button className={styles.actionButton} type="button" onClick={() => void buildArchive()}>
+            3. Maak mergebestand
           </button>
         </div>
       )}
+
       {buildStageOpen && activePlan?.status === "ready" && (
         <section className={styles.buildStage} aria-labelledby="build-stage-heading">
-          <h2 id="build-stage-heading">Back-up opbouwen en controleren</h2>
-          {buildingArchive && <p role="status">De database wordt opnieuw gevalideerd en lokaal opgebouwd…</p>}
+          <h2 id="build-stage-heading">Mergebestand maken</h2>
+          <p>De database en het nieuwe archief worden op dit apparaat opgebouwd en gecontroleerd.</p>
+          {buildingArchive && <p role="status">Bezig met samenvoegen en controleren…</p>}
           {archiveBuildError && <p className={styles.downloadError} role="alert">{archiveBuildError}</p>}
           {archiveWriteResult && <ArchiveDownload result={archiveWriteResult} summary={createDownloadSummary(activePlan)} />}
           {!buildingArchive && !archiveBuildError && !archiveWriteResult && (
-            <button className={styles.actionButton} type="button" onClick={() => void buildArchive()}>
-              Bestand maken en controleren
-            </button>
+            <button className={styles.actionButton} type="button" onClick={() => void buildArchive()}>Opnieuw proberen</button>
           )}
-          <button className={styles.clearFileButton} type="button" onClick={closeBuildStage}>
-            Terug naar het mergeplan en uitvoer wissen
-          </button>
+          <button className={styles.clearFileButton} type="button" onClick={closeBuildStage}>Terug naar de vergelijking</button>
         </section>
       )}
     </section>

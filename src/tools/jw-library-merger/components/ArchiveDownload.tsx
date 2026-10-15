@@ -82,14 +82,11 @@ export function ArchiveDownload({ result, summary }: ArchiveDownloadProps) {
       {downloadError && <p className={styles.downloadError} role="alert">{downloadError}</p>}
       {downloaded && result.status === "ready" && (
         <div className={styles.downloadSummary} role="status" aria-live="polite">
-          <h4>Download gestart: {result.fileName}</h4>
+          <h4>Je mergebestand wordt gedownload: {result.fileName}</h4>
           <p>{summary.recordCount} opgenomen mergeplanrecords in {Object.keys(summary.recordsByTable).length} tabellen.</p>
-          <h5>Gemaakte keuzes ({summary.choices.length})</h5>
-          {summary.choices.length ? <ul>{summary.choices.map((choice, index) => <li key={`${index}-${choice}`}>{choice}</li>)}</ul> : <p>Geen verschillende bronwaarden geselecteerd.</p>}
-          <h5>Onzekerheden ({summary.uncertainties.length})</h5>
-          {summary.uncertainties.length ? <ul>{summary.uncertainties.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul> : <p>Geen open onzekerheden gerapporteerd.</p>}
-          <h5>Niet meegenomen informatie ({summary.omissions.length})</h5>
-          {summary.omissions.length ? <ul>{summary.omissions.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul> : <p>Er is geen uitgesloten waarde gerapporteerd.</p>}
+          <details><summary>Gemaakte keuzes ({summary.choices.length})</summary>{summary.choices.length ? <ul>{summary.choices.map((choice, index) => <li key={`${index}-${choice}`}>{choice}</li>)}</ul> : <p>Geen verschillende bronwaarden geselecteerd.</p>}</details>
+          <details><summary>Aandachtspunten ({summary.uncertainties.length})</summary>{summary.uncertainties.length ? <ul>{summary.uncertainties.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul> : <p>Geen open onzekerheden gerapporteerd.</p>}</details>
+          <details><summary>Niet meegenomen informatie ({summary.omissions.length})</summary>{summary.omissions.length ? <ul>{summary.omissions.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul> : <p>Er is geen uitgesloten waarde gerapporteerd.</p>}</details>
           <details><summary>Aantallen per tabel</summary><ul>{Object.entries(summary.recordsByTable).map(([table, count]) => <li key={table}>{table}: {count}</li>)}</ul></details>
         </div>
       )}

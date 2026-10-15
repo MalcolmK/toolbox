@@ -11,7 +11,7 @@ interface SourceFilePickerProps {
 }
 
 export function SourceFilePicker({ source, file, check, busy, onChoose }: SourceFilePickerProps) {
-  const sourceLabel = source === "basis" ? "basisversie" : `bron ${source}`;
+  const sourceLabel = source === "basis" ? "basisversie" : `Back-up ${source}`;
   const inputId = `library-source-${source.toLowerCase()}`;
   const statusId = `${inputId}-status`;
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -37,11 +37,10 @@ export function SourceFilePicker({ source, file, check, busy, onChoose }: Source
   return (
     <div className={styles.sourceCard}>
       <div className={styles.sourceHeading}>
-        <h2>{source === "basis" ? "Basisversie" : `Back-up ${source}`}</h2>
-        <span className={styles.sourceBadge}>{sourceLabel}</span>
+          <h2>{sourceLabel}</h2>
       </div>
       <label className={styles.fileLabel} htmlFor={inputId}>
-        Kies .jwlibrary-bestand {source === "basis" ? "als basisversie" : source}
+        Kies een .jwlibrary-bestand voor {sourceLabel}
       </label>
       <input
         id={inputId}

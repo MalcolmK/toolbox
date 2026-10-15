@@ -1,12 +1,11 @@
 # Changelog
 
-## 0.2.1 — 2026-10-15
+## 0.3.0 — 2026-10-15
 
-- Regenerated the npm lockfile from `package.json`, including all optional Rolldown platform bindings such as the Linux x64 GNU binding required by GitHub Actions; npm refreshed transitive versions within the existing dependency ranges.
-- Updated checkout and setup-node actions in the browser-test and GitHub Pages workflows to v7, and aligned both workflows on Node.js 22.23.3.
-- Reduced Playwright concurrency to two workers in CI and simplified the note-text persistence flow to verify one forward/back navigation before resolving the remaining conflicts. This targets the WebKit-only 30-second timeout during reverse navigation.
-- Limited automatic GitHub Pages deployments to pushes to `main`; manual deployment remains available through `workflow_dispatch`.
-- Increased the timeout for the WebKit note-conflict end-to-end flow, which exceeded Playwright's 30-second default in CI.
+- Simplified the visible merger into a three-step Simple Mode flow, added A/B choices for eligible conflicts grouped by publication, hid Advanced Mode from the interface while retaining its implementation, and moved technical comparison details behind optional disclosures.
+- Clarified when an unresolved plan cannot produce a file and kept the POC download visibly separate from a JW Library-verified backup.
+- Added a current merger-readiness assessment: the POC can be tried without first proving a hash formula, while populated merge coverage, data preservation, and JW Library restore compatibility still need acceptance evidence.
+- Added two visual directions for the simplified workflow. No merge rules or POC verification claims were expanded in this round.
 
 ## 0.2.0 — 2026-10-14
 
