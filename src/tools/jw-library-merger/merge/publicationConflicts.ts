@@ -1,8 +1,8 @@
-import { identifyRecord } from "../compare/recordIdentity";
 import type { FieldDifference } from "../compare/compareLibraries";
 import type { UserDataRow, UserDataSnapshot } from "../database/readUserData";
 import type { MergeSource, SimpleMergeRecord } from "./simpleMerge";
 import type { SimpleMergePreview } from "./prepareSimpleMerge";
+import { locationPublicationGroupKey } from "./locationProposalGroups";
 
 export interface PublicationConflictGroup {
   readonly key: string;
@@ -34,16 +34,13 @@ function publicationKey(
   record: SimpleMergeRecord,
   row: UserDataRow,
 ): string | null {
-  if (record.tableName === "Location") {
-    return identifyRecord(snapshot, "Location", row).key;
-  }
-  const location = locationFor(snapshot, row);
-  return location ? identifyRecord(snapshot, "Location", location).key : null;
+  const location = record.tableName === "Location" ? row : locationFor(snapshot, row);
+  return location ? locationPublicationGroupKey(location) : null;
 }
 
 function publicationLabel(snapshot: UserDataSnapshot, locationKey: string): string {
   const locationTable = snapshot.tables.Location;
-  const location = locationTable?.rows.find((row) => identifyRecord(snapshot, "Location", row).key === locationKey);
+  const location = locationTable?.rows.find((row) => locationPublicationGroupKey(row) === locationKey);
   if (!location) return "Publicatie met conflict";
   if (typeof location.Title === "string" && location.Title.trim()) return location.Title.trim();
   const symbol = typeof location.KeySymbol === "string" && location.KeySymbol.trim() ? location.KeySymbol.trim() : null;
@@ -69,6 +66,7 @@ export function getPublicationConflictGroups(
   const [sourceA, sourceB] = preview.sources;
 
   for (const compared of preview.comparison.records) {
+    if (compared.tableName === "Location") continue;
     const record = preview.mergePlan.records.find((item) => item.tableName === compared.tableName
       && item.identityKey === compared.identityKey
       && item.comparisonStatus === compared.status);
@@ -95,7 +93,12 @@ export function getPublicationConflictGroups(
       label: record.tableName === "Note" && typeof title === "string" && title.trim()
         ? `Aantekening: ${title.trim()}`
         : record.tableName === "Location" ? "Publicatiegegevens" : record.tableName,
-      fields: compared.fieldDifferences,
+      fields: [
+        ...compared.fieldDifferences,
+        ...compared.relationshipDifferences.filter((difference) => difference.field === "BlockRanges")
+          .map((difference) => ({ field: "Bereikset", valueA: `${difference.rangeCountA ?? "onbekend"} bereiken`,
+            valueB: `${difference.rangeCountB ?? "onbekend"} bereiken` })),
+      ],
     });
     groups.set(keyA, group);
   }

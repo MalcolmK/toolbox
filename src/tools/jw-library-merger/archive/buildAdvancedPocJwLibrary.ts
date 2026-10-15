@@ -47,6 +47,8 @@ export async function buildAdvancedPocJwLibrary(
       validatedB,
       preview.sources[1].snapshot,
       plan,
+      undefined,
+      undefined,
     );
 
     const hashSource = selectAdvancedPocHashSource(preview);

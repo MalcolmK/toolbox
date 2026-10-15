@@ -2,17 +2,23 @@
 
 A responsive, browser-based toolbox. Its first tool combines JW Library backup files locally in the browser.
 
-Current development version: **0.3.0**.
+Current development version: **0.4.0**.
 
 ## JW Library Merger
 
 ### Use the current Simple Mode flow
 
 1. Choose two `.jwlibrary` backup files.
-2. Select **Vergelijk back-ups**. Review the short result summary and, for each publication with an eligible conflict, choose whether version A or B should be kept. Open the detail sections to inspect other changes or uncertain records.
+2. Select **Vergelijk back-ups**. Review and explicitly resolve proposed place and playlist links, then choose whether version A or B should be kept for each publication conflict. Open the detail sections to inspect the complete playlist structures and other uncertain records.
 3. If the plan is ready, select **Maak mergebestand** and download the POC file.
 
-The files stay on your device and the source backups are not changed. Each A/B choice applies only to the eligible conflicts shown under that publication. Records with uncertain identities or relationships remain unresolved and continue to block file creation. The result shows how many publication choices remain. A POC notice appears as soon as the comparison finishes: ZIP and database checks do not prove that JW Library accepts the generated backup. Advanced Mode is temporarily unavailable in the interface; its code remains in the project.
+The files stay on your device and the source backups are not changed. Each A/B choice applies only to the eligible conflicts shown under that publication. Records with uncertain identities or relationships remain unresolved and continue to block file creation. The result shows pending place, playlist, publication, and other decisions. A POC notice appears as soon as the comparison finishes: ZIP and database checks do not prove that JW Library accepts the generated backup. Advanced Mode is temporarily unavailable in the interface; its code remains in the project.
+
+### Scope of the 0.4.0 work
+
+The 0.4.0 work is scoped to schema version 16 and to the record forms observed in the two locally inspected backups. Place confirmation uses the exact ten-field schema description and remains separate from content choices. Playlist proposals compare item content, accuracy descriptions, media metadata and actual archive bytes, duration, confirmed place links, markers, verse/paragraph references, and playlist labels. Local IDs are excluded, labels are display-only, and both same/different decisions start unselected. All dependent rows and media references are rebuilt from confirmed logical identities; unknown, ambiguous, duplicate, missing, or conflicting structures block output unless safe separate retention is available. One-sided additions remain eligible when their identities and relationships can be resolved.
+
+The two inspected backups each contain 2,073 `Location` rows and 4,268 `Note` rows. Backup B contains one additional `UserMark`, three additional `BlockRange` rows, and one additional `InputField`. Both report schema version 16, contain 18 tables, and pass SQLite integrity and foreign-key checks. These aggregates are a source-pair baseline, not proof that the merger currently preserves the records or that JW Library accepts a generated file.
 
 ### What the download means
 
@@ -20,20 +26,9 @@ The browser checks the input archives and supported database schema. For a ready
 
 This is an experimental JW Library backup. The POC uses a source hash without claiming to verify its formula; confirming that formula is not a prerequisite for making the first candidate file. No generated file has yet been accepted and restored in JW Library. If JW Library rejects the candidate, investigate the manifest and hash behavior using that result. Do not treat a successful ZIP check as proof of JW Library acceptance.
 
-For each safely identified publication with a `possible-conflict`, Simple Mode asks whether to keep version A or B; timestamps do not choose between conflicting content. Some comparisons remain unresolved when record identity or relationships are ambiguous. A publication choice cannot resolve uncertain identities or relationships, so Simple Mode withholds the download while any such blockers remain. The synthetic populated conflict fixtures still block file creation because their `Location` identities are only candidates; the current successful download fixture uses empty, schema-valid libraries.
+For each safely identified publication with a `possible-conflict`, Simple Mode asks whether to keep version A or B; timestamps do not choose between conflicting content. Place and playlist identity decisions are separate from content choices. Some comparisons remain unresolved when record identities or relationships are ambiguous. A publication choice cannot resolve those uncertainties, so Simple Mode withholds the download while any such blockers remain. Step 8 adds a synthetic populated route with distinct source-local IDs, two conflicts in one publication, a conflict in another, one-sided note/mark/ranges/input field, and a confirmed playlist with media. The test checks the downloaded ZIP CRC and compares its reopened SQLite database against a frozen expected result. This synthetic evidence does not establish JW Library restore acceptance.
 
-### What remains before dependable use
-
-See [MERGE_READINESS.md](src/tools/jw-library-merger/MERGE_READINESS.md) for the evidence and next work needed. The main remaining steps are:
-
-- exercise representative populated merges with synthetic notes, marks, tags, relationships, and media, including conflict and unsupported-data cases;
-- confirm that publication choices in a safely resolvable populated fixture produce the expected database and archive contents;
-- restore a generated populated backup in a disposable JW Library profile and confirm the app accepts it and the expected data survives;
-- review unsupported schema/data cases and file-size or memory limits before dependable use.
-
-The interface explains unresolved choices and blocks file creation when a record cannot be safely matched. Browser tests verify those user-facing gates; they do not establish acceptance by JW Library or by a real screen reader.
-
-If JW Library rejects a generated POC, investigate the relevant manifest fields, including the hash behavior, as a follow-up to that observed result. Hash verification is not a prerequisite for making the first candidate file.
+Open implementation, test-coverage, and release-readiness items are tracked in [IMPLEMENTATION_TODO.md](IMPLEMENTATION_TODO.md). The project evidence and the distinction between technical ZIP/database checks and JW Library acceptance are in [MERGE_READINESS.md](src/tools/jw-library-merger/MERGE_READINESS.md).
 
 ## Local development
 
@@ -52,12 +47,6 @@ Available scripts:
 | `npm run preview` | Serve the production build locally. |
 | `npm test` | Run the Vitest unit tests. |
 | `npm run test:e2e` | Run the Playwright end-to-end suite. |
-
-The complete Simple Mode e2e suite now passes: 27 browser runs across nine workflows in Chromium, Microsoft Edge, and Playwright WebKit. The unit suite passes all 115 tests, and the production build succeeds. Browser coverage includes valid and invalid input, file replacement and restart, per-publication choices, blocking on uncertain identities, local POC generation and download, expected archive entries, unchanged source-file digests, and the absence of request bodies. Responsive checks at 375, 768, and 1440 pixels cover source selection and populated conflict cards; they check horizontal overflow, one-column versus two-column layouts, and whether both A/B controls fit inside each card. Keyboard checks cover reaching and activating an A/B choice, visible focus, `aria-pressed`, and the polite live status after a choice changes. Automated theme checks calculate text and focus-ring contrast for the conflict heading and selected choice against the card/canvas surfaces in light and dark themes; these are browser-rendered color checks, not manual testing with a real screen reader or Apple Safari. The populated conflict fixture intentionally remains blocked by uncertain `Location` identities, so successful download coverage currently uses empty, schema-valid libraries. A passing ZIP check does not demonstrate JW Library restore compatibility. WebKit testing also caught and fixed a mobile navigation close button that was partly outside the screen when the drawer was open.
-
-The seven previously failing Simple Mode scenarios were reviewed against the merge rules: content conflicts require a manual A/B choice; database and manifest timestamps are tested only on non-conflicting `changed` rows; timestamp offsets compare by instant; ties use the documented fallback; and the tests cover `Created` preservation and relationship reporting. The timestamp cases still leave uncertain `Location` rows unresolved, so they do not claim that a populated archive can be built. Manual `Created` preservation also records which backup supplied that field.
-
-A populated conflict download is still unverified. The current identity policy treats `Location` composite keys as candidates, not proven cross-backup identities. A synthetic match of those fields does not prove two locations in real backups are equivalent, so the merge remains blocked instead of forcing a populated output. The existing e2e workflow verifies that publication choices do not remove this blocker. A populated archive and a JW Library restore test require an explicit, validated way to resolve those location links first.
 
 ## Technology and deployment
 

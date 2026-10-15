@@ -32,6 +32,7 @@ export function selectSimplePocHashSource(preview: SimpleMergePreview): "A" | "B
 export async function buildSimplePocJwLibrary(
   preview: SimpleMergePreview,
   createdAt: Date = new Date(),
+  isResolutionContextCurrent?: () => boolean,
 ): Promise<JwLibraryWriteResult> {
   if (preview.mergePlan.status !== "ready") {
     throw new Error("De database kan niet worden opgebouwd zolang er mergekeuzes openstaan.");
@@ -48,6 +49,10 @@ export async function buildSimplePocJwLibrary(
       validatedB,
       preview.sources[1].snapshot,
       preview.mergePlan,
+      undefined,
+      preview.locationResolution,
+      isResolutionContextCurrent,
+      preview.playlistResolution,
     );
 
     const hashSource = selectSimplePocHashSource(preview);
@@ -58,12 +63,16 @@ export async function buildSimplePocJwLibrary(
       hashSource,
       createdAt,
     });
-    return writePocJwLibrary({
+    const result = await writePocJwLibrary({
       database,
       manifest,
       sourceLibraries: [preview.sources[0].archive, preview.sources[1].archive],
       createdAt,
     });
+    if (isResolutionContextCurrent && !isResolutionContextCurrent()) {
+      throw new Error("De plaats- of afspeellijstbevestigingen zijn tijdens het bouwen gewijzigd.");
+    }
+    return result;
   } finally {
     validatedA?.database.close();
     validatedB?.database.close();

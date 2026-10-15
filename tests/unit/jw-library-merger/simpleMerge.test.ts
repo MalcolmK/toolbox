@@ -6,6 +6,7 @@ import { readUserData, type UserDataSnapshot } from "../../../src/tools/jw-libra
 import { validateUserData } from "../../../src/tools/jw-library-merger/database/validateUserData";
 import { simpleMerge } from "../../../src/tools/jw-library-merger/merge/simpleMerge";
 import { simpleMergeReviewKey } from "../../../src/tools/jw-library-merger/merge/publicationConflicts";
+import { confirmLocationProposal, createLocationResolutionContext } from "../../../src/tools/jw-library-merger/merge/locationResolution";
 
 const fixtureUrl = (name: string) => new URL(`../../fixtures/jw-library/${name}`, import.meta.url);
 const sqliteWasm = new URL("../../../node_modules/sql.js/dist/sql-wasm.wasm", import.meta.url);
@@ -73,6 +74,21 @@ function replaceDatabaseTimestamp(snapshot: UserDataSnapshot, timestamp: string 
   };
 }
 
+function appendTableRow(snapshot: UserDataSnapshot, tableName: string, row: Readonly<Record<string, unknown>>): UserDataSnapshot {
+  const table = snapshot.tables[tableName]!;
+  return { ...snapshot, tables: { ...snapshot.tables,
+    [tableName]: { ...table, rows: [...table.rows, row], rowCount: table.rowCount + 1 } } };
+}
+
+function confirmSharedPlace(snapshotA: UserDataSnapshot, snapshotB: UserDataSnapshot) {
+  const context = createLocationResolutionContext("step-five", "place-pair", snapshotA, snapshotB);
+  const proposal = context.proposals[0];
+  if (!proposal) throw new Error("Expected one explicit shared-place proposal.");
+  const result = confirmLocationProposal(context, proposal.id, "step-five", 0, snapshotA, snapshotB, "A");
+  if (!result.ok) throw new Error(result.reason);
+  return result.context;
+}
+
 function replaceManifestTimestamp(snapshot: UserDataSnapshot, timestamp: string | null): UserDataSnapshot {
   return {
     ...snapshot,
@@ -81,6 +97,152 @@ function replaceManifestTimestamp(snapshot: UserDataSnapshot, timestamp: string 
 }
 
 describe("simpleMerge", () => {
+  it("uses confirmed logical places for dependent rows with different local IDs", async () => {
+    const a = await readSnapshot("identical-a.jwlibrary");
+    const b = await readSnapshot("identical-b.jwlibrary");
+    try {
+      const snapshotA = appendTableRow(a.snapshot, "TagMap", {
+        TagMapId: 2, PlaylistItemId: null, LocationId: 1, NoteId: null, TagId: 1, Position: 0,
+      });
+      const snapshotB = appendTableRow(b.snapshot, "TagMap", {
+        TagMapId: 2, PlaylistItemId: null, LocationId: 99, NoteId: null, TagId: 1, Position: 0,
+      });
+      const context = confirmSharedPlace(snapshotA, snapshotB);
+      const result = simpleMerge(snapshotA, snapshotB, new Map(), context);
+      expect(result.records.filter((record) => ["Note", "UserMark", "BlockRange", "Bookmark", "InputField", "TagMap"]
+        .includes(record.tableName)).every((record) => record.action === "keep-one")).toBe(true);
+      expect(result.report.unresolved.filter((item) => ["Note", "UserMark", "BlockRange", "Bookmark", "InputField", "TagMap"]
+        .includes(item.tableName))).toEqual([]);
+      expect(result.records.filter((record) => record.tableName === "TagMap")).toHaveLength(2);
+    } finally {
+      a.close();
+      b.close();
+    }
+  });
+
+  it("does not release a playlist-location map when only its Location parent is confirmed", async () => {
+    const a = await readSnapshot("identical-a.jwlibrary");
+    const b = await readSnapshot("identical-b.jwlibrary");
+    try {
+      const snapshotA = appendTableRow(a.snapshot, "PlaylistItemLocationMap", {
+        PlaylistItemId: 1, LocationId: 1, MajorMultimediaType: 0,
+      });
+      const snapshotB = appendTableRow(b.snapshot, "PlaylistItemLocationMap", {
+        PlaylistItemId: 1, LocationId: 99, MajorMultimediaType: 0,
+      });
+      const context = confirmSharedPlace(snapshotA, snapshotB);
+      const result = simpleMerge(snapshotA, snapshotB, new Map(), context);
+      const maps = result.records.filter((record) => record.tableName === "PlaylistItemLocationMap");
+      expect(maps.length).toBeGreaterThan(0);
+      expect(maps.every((record) => record.action === "needs-review"
+        && record.identityStatus === "uncertain")).toBe(true);
+      expect(result.report.unresolved.some((item) => item.tableName === "PlaylistItemLocationMap")).toBe(true);
+    } finally {
+      a.close();
+      b.close();
+    }
+  });
+
+  it("requires a source choice for an InputField Value conflict under a confirmed place", async () => {
+    const a = await readSnapshot("identical-a.jwlibrary");
+    const b = await readSnapshot("identical-b.jwlibrary");
+    try {
+      const snapshotB = replaceTableRow(b.snapshot, "InputField", 0, { Value: "Value from B" });
+      const context = confirmSharedPlace(a.snapshot, snapshotB);
+      const pending = simpleMerge(a.snapshot, snapshotB, new Map(), context);
+      const field = pending.records.find((record) => record.tableName === "InputField");
+      expect(field?.action).toBe("needs-review");
+      expect(field?.retainedAlternatives.map((candidate) => candidate.source).sort()).toEqual(["A", "B"]);
+      const resolved = simpleMerge(a.snapshot, snapshotB,
+        new Map([[simpleMergeReviewKey("InputField", field!.identityKey!), "A"]]), context);
+      expect(resolved.records.find((record) => record.tableName === "InputField"))
+        .toMatchObject({ action: "keep-one", selected: { source: "A", row: { Value: "Synthetic value" } } });
+      expect(resolved.report.informationLoss).toEqual(expect.arrayContaining([
+        expect.objectContaining({ tableName: "InputField", field: "Value", omittedFrom: "B", valueNotRetained: "Value from B" }),
+      ]));
+    } finally {
+      a.close();
+      b.close();
+    }
+  });
+
+  it("blocks a bookmark whose precise target no longer resolves", async () => {
+    const a = await readSnapshot("base.jwlibrary");
+    const b = await readSnapshot("base.jwlibrary");
+    try {
+      const snapshotB = replaceTableRow(b.snapshot, "Bookmark", 0, { LocationId: 999 });
+      const result = simpleMerge(a.snapshot, snapshotB);
+      expect(result.report.unresolved.some((item) => item.tableName === "Bookmark")).toBe(true);
+    } finally {
+      a.close();
+      b.close();
+    }
+  });
+
+  it("blocks same-slot bookmarks when their precise targets differ", async () => {
+    const a = await readSnapshot("identical-a.jwlibrary");
+    const b = await readSnapshot("identical-b.jwlibrary");
+    try {
+      const location = b.snapshot.tables.Location!.rows[0]!;
+      const withSecondTarget = appendTableRow(b.snapshot, "Location", {
+        ...location, LocationId: 100, DocumentId: 900100, KeySymbol: "SYNTHETIC-OTHER",
+      });
+      const snapshotB = replaceTableRow(withSecondTarget, "Bookmark", 0, { LocationId: 100 });
+      const context = confirmSharedPlace(a.snapshot, snapshotB);
+      const result = simpleMerge(a.snapshot, snapshotB, new Map(), context);
+      const bookmark = result.records.find((record) => record.tableName === "Bookmark");
+      expect(bookmark?.action).toBe("keep-both-pending-review");
+      expect(bookmark?.retainedAlternatives.map((candidate) => candidate.source).sort()).toEqual(["A", "B"]);
+      expect(result.report.unresolved.some((item) => item.tableName === "Bookmark")).toBe(true);
+    } finally {
+      a.close();
+      b.close();
+    }
+  });
+
+  it("treats changed mark range sets as one A/B decision and reports omitted coordinates", async () => {
+    const a = await readSnapshot("base.jwlibrary");
+    const b = await readSnapshot("base.jwlibrary");
+    try {
+      const snapshotB = replaceTableRow(b.snapshot, "BlockRange", 0, { EndToken: 5 });
+      const pending = simpleMerge(a.snapshot, snapshotB);
+      const mark = pending.records.find((record) => record.tableName === "UserMark");
+      expect(mark?.action).toBe("needs-review");
+      expect(mark?.retainedAlternatives.map((candidate) => candidate.source).sort()).toEqual(["A", "B"]);
+      const resolved = simpleMerge(a.snapshot, snapshotB,
+        new Map([[simpleMergeReviewKey("UserMark", mark!.identityKey!), "A"]]));
+      expect(resolved.records.find((record) => record.tableName === "UserMark"))
+        .toMatchObject({ action: "keep-one", selected: { source: "A" } });
+      expect(resolved.records.some((record) => record.tableName === "BlockRange" && record.action === "omit")).toBe(true);
+      expect(resolved.report.informationLoss).toEqual(expect.arrayContaining([
+        expect.objectContaining({ tableName: "BlockRange", field: "Range", omittedFrom: "B", valueNotRetained: "[1,10,0,5]" }),
+      ]));
+    } finally {
+      a.close();
+      b.close();
+    }
+  });
+
+  it("blocks duplicate ranges and ranges whose parent mark is missing", async () => {
+    const a = await readSnapshot("base.jwlibrary");
+    const b = await readSnapshot("base.jwlibrary");
+    try {
+      const table = b.snapshot.tables.BlockRange!;
+      const duplicate = { ...table.rows[0]!, BlockRangeId: 99 };
+      const duplicateSnapshot = appendTableRow(b.snapshot, "BlockRange", duplicate);
+      const duplicatePlan = simpleMerge(a.snapshot, duplicateSnapshot);
+      expect(duplicatePlan.report.unresolved.some((item) => item.tableName === "UserMark"
+        || item.tableName === "BlockRange")).toBe(true);
+
+      const orphan = replaceTableRow(b.snapshot, "BlockRange", 0, { UserMarkId: 999 });
+      const orphanPlan = simpleMerge(a.snapshot, orphan);
+      expect(orphanPlan.report.unresolved.some((item) => item.tableName === "BlockRange")).toBe(true);
+    } finally {
+      a.close();
+      b.close();
+    }
+  });
+
   it("requires an explicit A/B choice for conflicting note content and reports the chosen source", async () => {
     const a = await readSnapshot("base.jwlibrary");
     const b = await readSnapshot("modified-note-newer.jwlibrary");
@@ -349,8 +511,10 @@ describe("simpleMerge", () => {
       const addedMark = result.records.find((record) => record.tableName === "UserMark"
         && record.selected?.row.UserMarkGuid === "00000000-0000-4000-8000-000000001002");
       const ranges = result.records.filter((record) => record.tableName === "BlockRange");
-      const addedRanges = ranges.flatMap((record) => record.retainedAlternatives)
-        .filter((candidate) => candidate.row.UserMarkId === 2);
+      const addedRanges = ranges.flatMap((record) => [
+        ...(record.selected ? [record.selected] : []),
+        ...record.retainedAlternatives,
+      ]).filter((candidate) => candidate.row.UserMarkId === 2);
 
       expect(addedMark).toMatchObject({ action: "keep-one", selected: { source: "B" } });
       expect(addedRanges).toHaveLength(3);
@@ -358,8 +522,7 @@ describe("simpleMerge", () => {
         && candidate.row.UserMarkId === 2
         && b.snapshot.tables.UserMark?.rows.some((mark) => mark.UserMarkId === candidate.row.UserMarkId
           && mark.UserMarkGuid === "00000000-0000-4000-8000-000000001002"))).toBe(true);
-      expect(ranges.every((record) => record.selected === null && record.action === "needs-review"
-        || record.selected === null && record.action === "keep-both-pending-review")).toBe(true);
+      expect(addedRanges.every((candidate) => candidate.source === "B")).toBe(true);
     } finally {
       a.close();
       b.close();
@@ -375,7 +538,7 @@ describe("simpleMerge", () => {
       const tagMap = result.records.find((record) => record.tableName === "TagMap");
 
       expect(tagMap).toMatchObject({
-        action: "keep-both-pending-review",
+        action: "needs-review",
         selected: null,
         retainedAlternatives: [
           { source: "A", row: { Position: 0 } },
@@ -390,7 +553,7 @@ describe("simpleMerge", () => {
     }
   });
 
-  it("does not collapse matching natural-key tags whose cross-backup identity is still a candidate", async () => {
+  it("deduplicates a unique tag only when its natural key and every content field match", async () => {
     const a = await readSnapshot("base.jwlibrary");
     const b = await readSnapshot("base.jwlibrary");
     try {
@@ -398,15 +561,12 @@ describe("simpleMerge", () => {
       const tag = result.records.find((record) => record.tableName === "Tag");
 
       expect(tag).toMatchObject({
-        comparisonStatus: "uncertain-linked",
-        action: "keep-both-pending-review",
-        selected: null,
-        retainedAlternatives: [
-          { source: "A", row: { Type: 1, Name: "Synthetic tag" } },
-          { source: "B", row: { Type: 1, Name: "Synthetic tag" } },
-        ],
+        comparisonStatus: "equal",
+        action: "keep-one",
+        selected: { source: "A", row: { Type: 1, Name: "Synthetic tag" } },
+        retainedAlternatives: [],
       });
-      expect(result.report.unresolved.some((item) => item.tableName === "Tag")).toBe(true);
+      expect(result.report.unresolved.some((item) => item.tableName === "Tag")).toBe(false);
     } finally {
       a.close();
       b.close();

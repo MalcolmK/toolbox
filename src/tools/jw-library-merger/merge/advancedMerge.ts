@@ -285,7 +285,10 @@ export function buildAdvancedMergePlan(
     } else if (selected) {
       const presenceStatus = candidateA && candidateB ? decision.outcome === "unchanged" || decision.outcome === "same-change" ? "equal" : "changed"
         : candidateA ? "only-in-a" : "only-in-b";
-      records.push({ tableName: decision.tableName, identityKey, identityStatus: decision.logicalIdentity.confidence, comparisonStatus: presenceStatus, action: "keep-one", selected, retainedAlternatives: [], confidence, rule: reason });
+      records.push({ tableName: decision.tableName, identityKey, identityStatus: decision.logicalIdentity.confidence, comparisonStatus: presenceStatus, action: "keep-one", selected, retainedAlternatives: [],
+        ...(sourceA && sourceB && decision.logicalIdentity.confidence === "stable"
+          ? { sourceAliases: [selected.source === "A" ? sourceB : sourceA] } : {}),
+        confidence, rule: reason });
       for (const difference of decision.differences) {
         const output = selected.row[difference.path];
         if (candidateA) addLoss(informationLoss, decision.tableName, identityKey, difference.path, candidateA[difference.path], "A", output, selected.fieldSources?.[difference.path] ?? selected.source, reason);

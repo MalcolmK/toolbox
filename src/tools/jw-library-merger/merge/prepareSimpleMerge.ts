@@ -7,6 +7,8 @@ import { compareLibraries, type LibraryComparison } from "../compare/compareLibr
 import { buildMergeReport, type MergeReport } from "../report/buildMergeReport";
 import { simpleMerge, type SimpleMergeResult } from "./simpleMerge";
 import { compareThreeWay, type ThreeWayComparison } from "../compare/compareThreeWay";
+import { createLocationResolutionContext, type LocationResolutionContext } from "./locationResolution";
+import { createPlaylistResolutionContext, type PlaylistResolutionContext } from "./playlistResolution";
 
 export interface PreparedMergeSource {
   readonly fileName: string;
@@ -20,6 +22,8 @@ export interface SimpleMergePreview {
   readonly comparison: LibraryComparison;
   readonly differenceReport: MergeReport;
   readonly mergePlan: SimpleMergeResult;
+  readonly locationResolution: LocationResolutionContext;
+  readonly playlistResolution: PlaylistResolutionContext;
 }
 
 export interface AdvancedMergePreview {
@@ -95,12 +99,22 @@ export async function prepareSimpleMerge(
   }
 
   const sources = [resultA.value, resultB.value] as const;
-  const comparison = compareLibraries(sources[0].snapshot, sources[1].snapshot);
+  const locationResolution = createLocationResolutionContext(
+    crypto.randomUUID(), crypto.randomUUID(), sources[0].snapshot, sources[1].snapshot,
+  );
+  const playlistResolution = await createPlaylistResolutionContext(
+    locationResolution.sessionId, locationResolution.sourcePairId,
+    sources[0].snapshot, sources[1].snapshot,
+    sources[0].archive, sources[1].archive, locationResolution,
+  );
+  const comparison = compareLibraries(sources[0].snapshot, sources[1].snapshot, locationResolution, playlistResolution);
   return {
     sources,
+    locationResolution,
+    playlistResolution,
     comparison,
     differenceReport: buildMergeReport(comparison),
-    mergePlan: simpleMerge(sources[0].snapshot, sources[1].snapshot),
+    mergePlan: simpleMerge(sources[0].snapshot, sources[1].snapshot, new Map(), locationResolution, playlistResolution),
   };
 }
 
