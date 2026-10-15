@@ -24,6 +24,8 @@ const thumbnail = Uint8Array.from(
 const ids = {
   baseNote: "00000000-0000-4000-8000-000000000001",
   addedNote: "00000000-0000-4000-8000-000000000002",
+  secondConflictNote: "00000000-0000-4000-8000-000000000003",
+  otherPublicationNote: "00000000-0000-4000-8000-000000000004",
   firstMark: "00000000-0000-4000-8000-000000001001",
   addedMark: "00000000-0000-4000-8000-000000001002",
 };
@@ -45,12 +47,12 @@ function makeManifest(lastModifiedDate, schemaVersion = 16) {
   };
 }
 
-function insertNote(database, { noteId, guid, title, content, created, lastModified }) {
+function insertNote(database, { noteId, guid, title, content, created, lastModified, locationId = 1 }) {
   database.run(
     `INSERT INTO Note
       (NoteId, Guid, UserMarkId, LocationId, Title, Content, LastModified, Created, BlockType, BlockIdentifier)
-      VALUES (?, ?, NULL, 1, ?, ?, ?, ?, 0, NULL)`,
-    [noteId, guid, title, content, lastModified, created],
+      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, 0, NULL)`,
+    [noteId, guid, locationId, title, content, lastModified, created],
   );
 }
 
@@ -61,6 +63,8 @@ function createDatabase({
   addNote = false,
   addMarkAndRanges = false,
   emptyRecords = false,
+  publicationConflictSet = false,
+  conflictSource = "A",
 } = {}) {
   const database = new SQL.Database();
   database.run("PRAGMA foreign_keys = ON;");
@@ -76,15 +80,44 @@ function createDatabase({
         (LocationId, DocumentId, IssueTagNumber, KeySymbol, MepsLanguage, Type)
         VALUES (1, 900001, 0, 'SYNTHETIC', 1, 0)`,
     );
+    if (publicationConflictSet) {
+      database.run("UPDATE Location SET BookNumber = 1, ChapterNumber = 1, Title = 'Publication Alpha' WHERE LocationId = 1");
+      database.run(
+        `INSERT INTO Location
+          (LocationId, DocumentId, IssueTagNumber, KeySymbol, MepsLanguage, Type)
+          VALUES (2, 900002, 0, 'SYNTHETIC-OTHER', 1, 0)`,
+      );
+      database.run("UPDATE Location SET BookNumber = 2, ChapterNumber = 1, Title = 'Publication Beta' WHERE LocationId = 2");
+    }
 
     insertNote(database, {
       noteId: 1,
       guid: ids.baseNote,
-      title: "Synthetic note",
-      content: noteContent,
+      title: publicationConflictSet ? "First publication note" : "Synthetic note",
+      content: publicationConflictSet ? `First publication edit from source ${conflictSource}.` : noteContent,
       created: "2026-10-01T09:00:00Z",
       lastModified: noteLastModified,
     });
+
+    if (publicationConflictSet) {
+      insertNote(database, {
+        noteId: 2,
+        guid: ids.secondConflictNote,
+        title: "Second publication note",
+        content: `Second publication edit from source ${conflictSource}.`,
+        created: "2026-10-02T09:00:00Z",
+        lastModified: noteLastModified,
+      });
+      insertNote(database, {
+        noteId: 3,
+        guid: ids.otherPublicationNote,
+        title: "Other publication note",
+        content: `Other publication edit from source ${conflictSource}.`,
+        created: "2026-10-03T09:00:00Z",
+        lastModified: noteLastModified,
+        locationId: 2,
+      });
+    }
 
     database.run(
       `INSERT INTO UserMark
@@ -139,6 +172,16 @@ function createDatabase({
       database.run(
         "INSERT INTO InputField (LocationId, TextTag, Value) VALUES (1, 'tt21', 'Additional synthetic value')",
       );
+    }
+
+    if (publicationConflictSet) {
+      database.run("INSERT INTO PlaylistItemAccuracy (PlaylistItemAccuracyId, Description) VALUES (1, 'Default')");
+      database.run(
+        `INSERT INTO PlaylistItem (PlaylistItemId, Label, Accuracy, EndAction)
+          VALUES (1, ?, 1, 0)`,
+        [`Uncertain playlist identity from source ${conflictSource}`],
+      );
+      database.run("INSERT INTO PlaylistItemLocationMap (PlaylistItemId, LocationId, MajorMultimediaType) VALUES (1, 1, 0)");
     }
   }
 
@@ -200,6 +243,18 @@ const conflictBDatabase = createDatabase({
   noteLastModified: "2026-10-11T12:00:00Z",
   databaseLastModified: "2026-10-11T12:00:00Z",
 });
+const publicationConflictADatabase = createDatabase({
+  databaseLastModified: "2026-10-11T11:00:00Z",
+  noteLastModified: "2026-10-11T11:00:00Z",
+  publicationConflictSet: true,
+  conflictSource: "A",
+});
+const publicationConflictBDatabase = createDatabase({
+  databaseLastModified: "2026-10-11T12:00:00Z",
+  noteLastModified: "2026-10-11T12:00:00Z",
+  publicationConflictSet: true,
+  conflictSource: "B",
+});
 const marksDatabase = createDatabase({
   databaseLastModified: "2026-10-11T13:00:00Z",
   addMarkAndRanges: true,
@@ -223,6 +278,14 @@ await writeArchive("conflict-source-a.jwlibrary", {
 });
 await writeArchive("conflict-source-b.jwlibrary", {
   databaseBytes: conflictBDatabase,
+  manifest: makeManifest("2026-10-11T12:00:00Z"),
+});
+await writeArchive("publication-conflicts-a.jwlibrary", {
+  databaseBytes: publicationConflictADatabase,
+  manifest: makeManifest("2026-10-11T11:00:00Z"),
+});
+await writeArchive("publication-conflicts-b.jwlibrary", {
+  databaseBytes: publicationConflictBDatabase,
   manifest: makeManifest("2026-10-11T12:00:00Z"),
 });
 await writeArchive("mark-and-ranges-added.jwlibrary", {

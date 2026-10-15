@@ -295,6 +295,32 @@
   background: var(--color-surface-card);
 }
 
+.resultSummary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-card);
+}
+
+.resultSummary strong { color: var(--color-text-primary); }
+.resultSummary p { margin: var(--space-1) 0 0; color: var(--color-text-secondary); }
+
+.pocNotice {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-card);
+}
+
+.pocNotice strong { color: var(--color-text-primary); }
+.pocNotice p { margin: 0; color: var(--color-text-secondary); line-height: var(--line-height-body); }
+
 .sourceSummary p,
 .planSummary,
 .emptyMessage {

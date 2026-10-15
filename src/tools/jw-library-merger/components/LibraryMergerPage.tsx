@@ -179,7 +179,7 @@ export function LibraryMergerPage({ surfaceClassName, headingRef }: LibraryMerge
 
       <div className={styles.actions}>
         <button className={styles.actionButton} type="button" disabled={!canCompare} onClick={() => void compareFiles()}>
-          {busy ? "Back-ups controleren…" : "2. Vergelijk en maak merge"}
+          {busy ? "Back-ups controleren…" : "Vergelijk back-ups"}
         </button>
         {preview && <button className={styles.clearFileButton} type="button" onClick={clearResults}>Opnieuw beginnen</button>}
       </div>

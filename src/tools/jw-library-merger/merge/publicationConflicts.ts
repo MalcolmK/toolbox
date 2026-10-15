@@ -101,14 +101,19 @@ export function getPublicationConflictGroups(
   }
 
   return [...groups.entries()].map(([key, group]) => {
-    const chosenSources = new Set(group.recordKeys.map((reviewKey) => selections.get(reviewKey)).filter(Boolean));
+    const chosenSources = group.recordKeys.map((reviewKey) => selections.get(reviewKey));
+    const selectedSource: MergeSource | null = chosenSources.length > 0 && chosenSources.every((source) => source === "A")
+      ? "A"
+      : chosenSources.length > 0 && chosenSources.every((source) => source === "B")
+        ? "B"
+        : null;
     return {
       key,
       label: publicationLabel(sourceA.snapshot, key),
       records: group.records,
       recordKeys: group.recordKeys,
       differences: group.differences,
-      selectedSource: chosenSources.size === 1 ? [...chosenSources][0] as MergeSource : null,
+      selectedSource,
     };
   }).sort((left, right) => left.label.localeCompare(right.label, "nl"));
 }

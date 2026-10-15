@@ -68,16 +68,27 @@ export function SimpleMergeResults({
   const selectedA = mergePlan.report.choices.filter((choice) => choice.selectedSource === "A").length;
   const selectedB = mergePlan.report.choices.filter((choice) => choice.selectedSource === "B").length;
   const publicationConflicts = getPublicationConflictGroups(preview, reviewChoices);
+  const unresolvedPublications = publicationConflicts.filter((group) => group.selectedSource === null).length;
+  const publicationRecordKeys = new Set(publicationConflicts.flatMap((group) => group.recordKeys));
+  const otherOpenItems = unresolved.filter((item) =>
+    !item.identityKey || !publicationRecordKeys.has(`${item.tableName}:${item.identityKey}`)).length;
+  const statusLabel = mergePlan.status === "ready"
+    ? "Klaar om bestand te maken"
+    : unresolvedPublications > 0
+      ? `${unresolvedPublications} publicatiekeuze${unresolvedPublications === 1 ? "" : "s"} nodig`
+      : otherOpenItems > 0
+        ? `${otherOpenItems} open punt${otherOpenItems === 1 ? "" : "en"}`
+        : "Controle nodig";
 
   return (
     <section className={styles.results} aria-labelledby="merge-results-heading">
       <div className={styles.resultsHeading}>
         <div>
-          <h2 id="merge-results-heading">2. Resultaat van de vergelijking</h2>
+          <h2 id="merge-results-heading">Resultaat van de vergelijking</h2>
           <p>Je originele back-ups zijn niet gewijzigd.</p>
         </div>
         <span className={mergePlan.status === "ready" ? styles.readyBadge : styles.reviewBadge}>
-          {mergePlan.status === "ready" ? "Keuzes afgerond" : "Controle nodig"}
+          {statusLabel}
         </span>
       </div>
 
@@ -85,61 +96,23 @@ export function SimpleMergeResults({
         {preview.sources.map((source, index) => (
           <p key={`${index}-${source.fileName}`}>
             <strong>Back-up {index === 0 ? "A" : "B"}:</strong> {source.fileName}
-            <span> · schema {source.schemaVersion}</span>
           </p>
         ))}
       </div>
 
-      <details className={styles.differenceDetails}>
-        <summary>Tijdstempels en technische details bekijken</summary>
-        <section aria-labelledby="timestamps-heading">
-        <h3 id="timestamps-heading">Tijdstempels</h3>
-        <ul className={styles.detailList}>
-          {differenceReport.sources.flatMap((source) => source.timestamps.map((timestamp) => (
-            <li key={`${source.label}-${timestamp.label}-${timestamp.recordLabel ?? "source"}`}>
-              <strong>{source.label} · {timestamp.label}</strong>
-              <p>{timestamp.originalValue ?? "Tijdstempel ontbreekt"} · {timestamp.status}</p>
-              {timestamp.utcValue && <p>Genormaliseerd: {timestamp.utcValue}</p>}
-              <p>{timestamp.message}</p>
-            </li>
-          )))}
-        </ul>
-        {differenceReport.timestampWarnings.length > 0 && (
-          <ul className={styles.warningList} aria-label="Tijdstempelwaarschuwingen">
-            {differenceReport.timestampWarnings.map((warning, index) => (
-              <li key={`${warning.source}-${warning.label}-${warning.recordLabel ?? index}`}>{warning.message}</li>
-            ))}
-          </ul>
-        )}
-        </section>
-      </details>
-
-      <section aria-labelledby="difference-summary-heading">
-        <h3 id="difference-summary-heading">Verschillen</h3>
-        <dl className={styles.summaryGrid}>
-          <div><dt>Gelijk</dt><dd>{counts.equal}</dd></div>
-          <div><dt>Alleen in back-up A</dt><dd>{counts.onlyInA}</dd></div>
-          <div><dt>Alleen in back-up B</dt><dd>{counts.onlyInB}</dd></div>
-          <div><dt>Gewijzigd</dt><dd>{counts.changed}</dd></div>
-          <div><dt>Mogelijk conflict</dt><dd>{counts.possibleConflicts}</dd></div>
-          <div><dt>Onzeker gekoppeld</dt><dd>{counts.uncertain}</dd></div>
-        </dl>
-      </section>
-
-      <section aria-labelledby="plan-summary-heading">
-        <h3 id="plan-summary-heading">Wat wordt meegenomen</h3>
-        <p className={styles.planSummary}>
-          {selectedA} keuze(s) uit back-up A en {selectedB} uit back-up B.
-          {unresolved.length === 0
-            ? ` Geen open keuzes${losses.length ? `; ${losses.length} waarde(s) worden niet meegenomen` : ""}.`
-            : ` ${unresolved.length} open keuze(s); het mergebestand is daarom nog niet beschikbaar.`}
-        </p>
-        {mergePlan.report.warnings.length > 0 && (
-          <ul className={styles.warningList} aria-label="Aandachtspunten">
-            {mergePlan.report.warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}
-          </ul>
-        )}
-      </section>
+      <div className={styles.resultSummary} role="status" aria-live="polite" aria-atomic="true">
+        <div>
+          <strong>Vergelijking afgerond</strong>
+          <p>
+            {publicationConflicts.length === 0
+              ? "Geen publicatieconflicten gevonden."
+              : `${publicationConflicts.length} conflicterende publicatie${publicationConflicts.length === 1 ? "" : "s"}.`}
+            {unresolvedPublications > 0 && ` ${unresolvedPublications} keuze${unresolvedPublications === 1 ? "" : "s"} nodig.`}
+            {otherOpenItems > 0 && ` ${otherOpenItems} ander open punt${otherOpenItems === 1 ? "" : "en"}.`}
+            {mergePlan.status === "ready" && " Je kunt nu een mergebestand maken."}
+          </p>
+        </div>
+      </div>
 
       {publicationConflicts.length > 0 && (
         <section className={styles.conflictReview} aria-labelledby="publication-conflicts-heading">
@@ -196,6 +169,63 @@ export function SimpleMergeResults({
           ))}
         </section>
       )}
+
+      <div className={styles.pocNotice} role="note" aria-label="POC-status">
+        <strong>POC-bestand: acceptatie in JW Library is niet bevestigd</strong>
+        <p>De controles in deze tool bewijzen niet dat JW Library het bestand accepteert. Je kunt een kandidaat maken zonder vooraf de hashformule te laten verifiëren.</p>
+      </div>
+
+      <details className={styles.differenceDetails}>
+        <summary>Tijdstempels en technische details bekijken</summary>
+        <section aria-labelledby="timestamps-heading">
+        <h3 id="timestamps-heading">Tijdstempels</h3>
+        <ul className={styles.detailList}>
+          {differenceReport.sources.flatMap((source) => source.timestamps.map((timestamp) => (
+            <li key={`${source.label}-${timestamp.label}-${timestamp.recordLabel ?? "source"}`}>
+              <strong>{source.label} · {timestamp.label}</strong>
+              <p>{timestamp.originalValue ?? "Tijdstempel ontbreekt"} · {timestamp.status}</p>
+              {timestamp.utcValue && <p>Genormaliseerd: {timestamp.utcValue}</p>}
+              <p>{timestamp.message}</p>
+            </li>
+          )))}
+        </ul>
+        {differenceReport.timestampWarnings.length > 0 && (
+          <ul className={styles.warningList} aria-label="Tijdstempelwaarschuwingen">
+            {differenceReport.timestampWarnings.map((warning, index) => (
+              <li key={`${warning.source}-${warning.label}-${warning.recordLabel ?? index}`}>{warning.message}</li>
+            ))}
+          </ul>
+        )}
+        </section>
+      </details>
+
+      <details className={styles.differenceDetails}>
+        <summary>Bekijk uitgebreide verschilcijfers</summary>
+        <section aria-labelledby="difference-summary-heading">
+        <h3 id="difference-summary-heading">Uitgebreide verschillen</h3>
+        <dl className={styles.summaryGrid}>
+          <div><dt>Gelijk</dt><dd>{counts.equal}</dd></div>
+          <div><dt>Alleen in back-up A</dt><dd>{counts.onlyInA}</dd></div>
+          <div><dt>Alleen in back-up B</dt><dd>{counts.onlyInB}</dd></div>
+          <div><dt>Gewijzigd</dt><dd>{counts.changed}</dd></div>
+          <div><dt>Mogelijk conflict</dt><dd>{counts.possibleConflicts}</dd></div>
+          <div><dt>Onzeker gekoppeld</dt><dd>{counts.uncertain}</dd></div>
+        </dl>
+        </section>
+      </details>
+
+      <details className={styles.differenceDetails}>
+        <summary>Bekijk mergekeuzes en aandachtspunten</summary>
+        <section aria-labelledby="plan-summary-heading">
+        <h3 id="plan-summary-heading">Wat wordt meegenomen</h3>
+        <p className={styles.planSummary}>{selectedA} keuze(s) uit back-up A en {selectedB} uit back-up B. {unresolved.length} open punt(en); {losses.length} waarde(s) worden niet meegenomen.</p>
+        {mergePlan.report.warnings.length > 0 && (
+          <ul className={styles.warningList} aria-label="Aandachtspunten">
+            {mergePlan.report.warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}
+          </ul>
+        )}
+        </section>
+      </details>
 
       <details className={styles.differenceDetails}>
         <summary>Bekijk niet-meegenomen informatie ({losses.length})</summary>
@@ -261,7 +291,7 @@ export function SimpleMergeResults({
                     {` B «${timestamps.valueB?.originalValue ?? "onbekend"}»`}
                   </p>
                 ))}
-                {record.uncertaintyNotes.map((note) => <p key={note}>{note}</p>)}
+                {record.uncertaintyNotes.map((note, index) => <p key={`${index}-${note}`}>{note}</p>)}
               </li>
             ))}
           </ul>

@@ -1,6 +1,6 @@
 # Merge readiness
 
-Status checked from the version 0.3.0 source. This describes what the app can do now and what still needs evidence before relying on a restored library.
+Status checked from the version 0.3.0 source on 2026-10-15. This describes what the app can do now and what still needs evidence before relying on a restored library.
 
 ## What works in the current flow
 
@@ -20,11 +20,14 @@ That candidate is not represented as a verified production backup. If JW Library
 
 ## Remaining work, in priority order
 
-1. **Exercise the version A/B publication choices.** Build synthetic cases with one and multiple conflicts under a publication, plus more than one publication. Confirm each choice selects the intended source rows and their linked records, reports omitted values, and blocks ambiguous identities or mismatched publication links.
-2. **Refresh and run the UI checks.** Existing browser workflow checks still expect the old Simple/Advanced mode picker. Update them for the current Simple-only interface, verify choosing A/B and downloading a ready POC, and check phone, tablet, and desktop layouts.
-3. **Try a populated candidate in JW Library.** Use a disposable test profile and a synthetic populated merge. Confirm whether JW Library accepts and reopens it, then compare the expected notes, marks, ranges, tags, bookmarks, and relationships. The current automated successful-download fixture is empty, so it does not establish populated data retention.
-4. **Expand supported cases from evidence.** The validator currently accepts schema version 16 only. Review any other app schema versions and any rows, media paths, or database objects that cannot safely be matched or retained before enabling them.
-5. **Check file-size and memory handling.** ZIP and SQLite operations can use substantially more memory than the compressed file size. Add conservative preflight limits and clear stop behavior after selecting representative backups and devices. Never offer a result after an interrupted or failed check.
+1. **Verify a populated A/B result in the packaged database.** Extend synthetic cases with safely resolvable conflicting records, multiple conflicts per publication, independent publications, and linked records. Confirm each choice selects the expected source rows, relationships and reported retained/omitted values in the actual downloadable database. Existing browser checks verify the selection controls and safe blocking, but the populated conflict fixture still blocks on uncertain `Location` identities; successful download tests use empty libraries.
+2. **Try a populated candidate in JW Library.** Use a disposable test profile and a synthetic populated merge. Confirm whether JW Library accepts and reopens it, then compare the expected notes, marks, ranges, tags, bookmarks, and relationships. The current automated successful-download fixture is empty, so it does not establish populated data retention.
+3. **Expand supported cases from evidence.** The validator currently accepts schema version 16 only. Review any other app schema versions and any rows, media paths, or database objects that cannot safely be matched or retained before enabling them.
+4. **Check file-size and memory handling.** ZIP and SQLite operations can use substantially more memory than the compressed file size. Add conservative preflight limits and clear stop behavior after selecting representative backups and devices. Never offer a result after an interrupted or failed check.
+
+## Interface and automated test status
+
+Advanced Mode is not reachable from the toolbox card, merger screen, or tool navigation. Its implementation remains in the source tree. The Simple-only interface has e2e coverage for its toolbox entry and the absence of Advanced Mode or base-version controls. The complete suite passes 27 browser runs across nine workflows in Chromium, Microsoft Edge, and Playwright WebKit. It includes responsive checks at 375, 768, and 1440 pixels plus keyboard focus, live status, pressed states, and computed light/dark contrast. This is not a manual screen-reader or Apple Safari acceptance test.
 
 ## Current stop conditions
 

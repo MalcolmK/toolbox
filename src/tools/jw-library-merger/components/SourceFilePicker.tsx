@@ -25,7 +25,7 @@ export function SourceFilePicker({ source, file, check, busy, onChoose }: Source
     status = "Bestand wordt gecontroleerd…";
     statusClass = styles.statusWorking;
   } else if (check?.valid) {
-    status = `Geldig JW Library-bestand · schema ${check.schemaVersion}`;
+    status = "Geldig JW Library-bestand.";
     statusClass = styles.statusValid;
   } else if (check && !check.valid) {
     status = check.error ?? "Dit bestand kon niet worden gevalideerd.";

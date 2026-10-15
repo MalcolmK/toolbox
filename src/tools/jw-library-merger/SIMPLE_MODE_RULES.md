@@ -1,6 +1,6 @@
 # Simple mode merge rules
 
-This document defines the automatic policy implemented by `merge/simpleMerge.ts`. The planner and its browser workflow compare validated snapshots and prepare source-attributed choices; they do not mutate or rewrite either input. A separate database builder turns a fully resolved Simple mode plan into SQLite bytes after integrity checks, and the local archive/download flow is connected. The production flow currently stops at the fail-closed manifest gate because JW Library's hash rule is unverified. The goal is to retain as much information as possible while choosing the newest version when recency can be established. Every choice that omits a distinct value must be described in the result report.
+This document defines the policy implemented by `merge/simpleMerge.ts`. The planner and its browser workflow compare validated snapshots and prepare source-attributed choices; they do not mutate or rewrite either input. A separate database builder turns a fully resolved Simple mode plan into SQLite bytes after integrity checks, and the local archive/download flow is connected. The production flow currently stops at the fail-closed manifest gate because JW Library's hash rule is unverified. The goal is to retain as much information as possible while choosing the newest version when recency can be established. Every choice that omits a distinct value must be described in the result report.
 
 ## 1. Preconditions and source order
 
@@ -25,7 +25,7 @@ A record found on only one side is not evidence of deliberate deletion. With two
 
 ## 3. Determine which source is newer
 
-Use this order only when two versions of a record differ and the record itself has no decisive timestamp, or when the record's timestamps tie or are unknown:
+For every row classified as `possible-conflict`, ask the user to choose Back-up A or Back-up B for that publication. This explicit choice is required even when timestamps appear to order the rows; timestamps must not silently discard one side's conflicting content. Apply the source-recency order below only to rows classified as `changed` that are otherwise eligible for automatic selection and have no decisive record timestamp, or whose record timestamps tie or are unknown:
 
 1. Use the singleton `LastModified.LastModified` value as the database recency signal if it is valid in both sources. Because this is a database-level time rather than a per-record edit time, label the winner as an uncertain source-recency tie-break and show the evidence.
 2. If either database timestamp is missing or invalid, use the manifest `userDataBackup.lastModifiedDate` values if both are valid.
@@ -37,7 +37,7 @@ This fail-closed rule is necessary because choosing A or B by screen order would
 
 ## 4. Resolve a changed record
 
-1. For a stable record with two valid, unequal record-level `LastModified` instants, retain the complete row from the later instant. Do not combine fields from two versions of that row unless a later, separately reviewed rule proves those fields can safely coexist.
+1. For a stable record classified as `changed` (not `possible-conflict`) with two valid, unequal record-level `LastModified` instants, retain the complete row from the later instant. Do not combine fields from two versions of that row unless a later, separately reviewed rule proves those fields can safely coexist. A `possible-conflict` always requires an explicit A/B choice.
 2. If record-level timestamps are equal, missing, invalid, or unavailable, use the source recency order from section 3.
 3. A newer valid timestamp on one side and an unknown timestamp on the other is not by itself proof that the known-timestamp value is newer. Use the source recency order; if that is unresolved, leave the group unresolved.
 4. For `Note`, retain the `Created` value from the selected content version when both values represent the same instant. If both valid `Created` values differ, preserve the earliest valid instant as the likely original creation time, keep its exact source text, and report the other value as not retained. If only one `Created` value is valid, retain it and report the unknown counterpart. If neither is valid, retain the raw `Created` value from the selected content version and mark creation time unknown.
@@ -86,13 +86,13 @@ Each case below maps to the numbered rules above. These cases use only the repos
 | --- | --- | --- |
 | `identical-a.jwlibrary` + `identical-b.jwlibrary` | Copy stable equal records once; report candidate/uncertain records without pretending they are confirmed matches. | 2, 5 |
 | `base.jwlibrary` + `new-note.jwlibrary` | Retain the existing note and the one-sided added note. | 2, 5.1 |
-| `base.jwlibrary` + `modified-note-newer.jwlibrary` | Keep the later valid note version as a whole; retain the chosen version's `Created` and `LastModified` provenance. | 3, 4.1, 4.4–4.5 |
-| `conflict-source-a.jwlibrary` + `conflict-source-b.jwlibrary` | Use valid per-note modification times to choose the later content; report the other content value as omitted and identify the time evidence. | 4.1, 7 |
-| Differing note content with equal or unavailable note times but clearly ordered database `LastModified` values | Use the newer database as the fallback; explicitly label the choice as an uncertain source-recency tie-break, not a note edit time. | 3.1–3.2, 4.2, 4.6 |
+| `base.jwlibrary` + `modified-note-newer.jwlibrary` | For a `possible-conflict`, request an explicit A/B choice even when per-note timestamps differ; retain the chosen version's `Created` and `LastModified` provenance. | 3, 4.1, 4.4–4.5 |
+| `conflict-source-a.jwlibrary` + `conflict-source-b.jwlibrary` | Request an explicit A/B choice for the differing note content; timestamps do not silently choose between possible-conflict values. | 3, 7 |
+| Non-conflicting `changed` note row with equal content and tied/unavailable note times but clearly ordered database `LastModified` values | Use the newer database as the fallback; explicitly label the choice as an uncertain source-recency tie-break, not a note edit time. | 3.1–3.2, 4.2, 4.6 |
 | Different note timestamp strings representing instants in different timezone offsets | Compare normalized instants, select the later instant even if its written local clock appears earlier, and retain the original chosen timestamp. | 1.4, 4.1 |
 | Equal note timestamp instants with ordered database `LastModified` values | Fall back to database recency and label its lower confidence. | 3.1, 4.2 |
 | Unusable database times with ordered manifest `userDataBackup.lastModifiedDate` values | Use manifest database time, identify the fallback in the warning and report. | 3.2, 3.4 |
-| Differing note content with unresolved note and database recency | Ask the user to choose A or B for that publication; keep both values visible during review and withhold download until every eligible publication conflict is resolved. | 3.5, 7 |
+| Differing note content with any timestamp evidence | Ask the user to choose A or B for that publication; keep both values visible during review and withhold download until every eligible publication conflict is resolved. If identity or publication linkage is uncertain, the choice alone cannot unblock output. | 3, 7 |
 | `base.jwlibrary` + `mark-and-ranges-added.jwlibrary` | Keep the new stable mark; retain or withhold each range/input field only with its required links; flag candidate identities and any omitted dependent row. | 2, 5.1–5.5, 6 |
 | Matching natural-key tags that still have candidate identity, or a tag mapping with different positions | Retain source alternatives, do not collapse the candidate or drop either mapping, and require review. | 2, 5.5, 6 |
 | Malformed foreign key in an in-memory planner input | Retain the affected source rows for review and prevent a final result; normal validated archive input should be rejected before reaching this planner case. | 2, 5.3, 6 |

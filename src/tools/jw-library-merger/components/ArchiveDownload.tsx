@@ -63,7 +63,7 @@ export function ArchiveDownload({ result, summary }: ArchiveDownloadProps) {
       {result.status === "ready" && result.verification === "poc-unverified" && (
         <div className={styles.downloadBlocked} role="note" aria-label="POC-waarschuwing">
           <strong>POC-bestand · JW Library-acceptatie is niet geverifieerd</strong>
-          <p>De hash is voorlopig overgenomen uit bron {result.hashSource ?? "onbekend"} en is niet gecontroleerd. De .jwlibrary-bestandsextensie bewijst niet dat JW Library het bestand accepteert. Download alleen als POC en controleer de acceptatie zelf.</p>
+          <p>De inhoud is als ZIP gecontroleerd, maar JW Library heeft deze back-up nog niet geaccepteerd. De .jwlibrary-bestandsextensie bewijst niet dat de app het bestand kan openen. Download dit bestand alleen als POC.</p>
         </div>
       )}
       {result.status === "blocked" && (

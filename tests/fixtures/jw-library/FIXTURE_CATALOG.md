@@ -21,6 +21,8 @@ the fixtures are not claimed to be importable by JW Library.
 | `new-note.jwlibrary` | One new note relative to the base. |
 | `modified-note-newer.jwlibrary` | Existing note content changed with a later note and database timestamp. |
 | `conflict-source-a.jwlibrary` + `conflict-source-b.jwlibrary` | Same note independently represented with different contents and timestamps. |
+| `publication-conflicts-a.jwlibrary` + `publication-conflicts-b.jwlibrary` | Three note conflicts across two publications: two notes belong to one publication, one belongs to another, and an uncertain playlist item remains unresolved after publication choices. |
+| `resolvable-publication-conflicts-a.jwlibrary` + `resolvable-publication-conflicts-b.jwlibrary` | The same three note conflicts across two publications without the uncertain playlist relationship, for a complete publication-choice-to-download flow. |
 | `mark-and-ranges-added.jwlibrary` | One additional mark, three related block ranges, and one extra input field. |
 | `empty-a.jwlibrary` + `empty-b.jwlibrary` | Identical schema-valid libraries with no user records; the Simple plan has no unresolved groups and exercises the ready-to-build UI gate. |
 | `missing-manifest.jwlibrary` | ZIP without `manifest.json`. |
