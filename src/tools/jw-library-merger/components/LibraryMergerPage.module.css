@@ -556,7 +556,7 @@
 .manualTextEditor textarea:focus-visible, .granularitySwitch button:focus-visible, .textMergeSegment button:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
 .textSelectionPreview { border: 1px solid var(--color-accent); }
 
-@media (max-width: 680px) {
+@media (max-width: 800px) {
   .sourceGrid { grid-template-columns: minmax(0, 1fr); }
   .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .resultsHeading { align-items: flex-start; flex-direction: column; }
