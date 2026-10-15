@@ -2,7 +2,7 @@
 
 A responsive, browser-based toolbox for small utilities. The first tool is JW Library Merger. The app is built with React, TypeScript, and Vite and can be hosted as a static site on GitHub Pages.
 
-Current development version: **0.2.0**.
+Current development version: **0.2.1**.
 
 ## JW Library Merger
 
@@ -47,11 +47,11 @@ The implementation now provides a download path in **both Simple and Advanced mo
 - Broad memory-limit work, hash-rule research, cross-browser certification, and production release checks are not required to complete this POC.
 - Supplied personal backups are for local analysis or the user's own later acceptance check only; never add them to the repository or test fixtures. The optional Advanced base is comparison-only, and only A/B can contribute output data.
 
-Keep the existing production hash-verification route separate from the explicitly provisional POC route. All work remains under version **0.2.0**.
+Keep the existing production hash-verification route separate from the explicitly provisional POC route. All work remains under version **0.2.1**.
 
 ### Download validation status
 
-The unit tests check ZIP round-tripping with CRC validation and block invalid manifests, unchecked database bytes, missing media, unsafe paths, conflicting archive entries, unresolved merge choices, unsafe Advanced identities, and unverified hashes. They also verify that production and POC writers reject each other's manifest status, and that an Advanced comparison base cannot contribute output records or the provisional hash. The writer reopens each generated archive, compares the stored database bytes exactly with the checked bytes supplied by the database builder, and requires all selected media entries to be present. Playwright reads back the actual downloaded `.jwlibrary` in both modes, reopens it with ZIP CRC checking, and verifies that the manifest and its named database are present. It also compares SHA-256 digests of the selected source files before and after each download flow. The successful-download fixtures are empty schema-valid libraries. On 2026-10-14, the production build passed, all 114 unit tests passed, and all 21 browser runs passed (seven each in Chromium, Microsoft Edge, and WebKit). WebKit is automated Safari-engine coverage, not a substitute for testing in Apple's Safari. Successful production downloads remain unavailable by design, and JW Library acceptance/restore has not been verified.
+The unit tests check ZIP round-tripping with CRC validation and block invalid manifests, unchecked database bytes, missing media, unsafe paths, conflicting archive entries, unresolved merge choices, unsafe Advanced identities, and unverified hashes. They also verify that production and POC writers reject each other's manifest status, and that an Advanced comparison base cannot contribute output records or the provisional hash. The writer reopens each generated archive, compares the stored database bytes exactly with the checked bytes supplied by the database builder, and requires all selected media entries to be present. Playwright reads back the actual downloaded `.jwlibrary` in both modes, reopens it with ZIP CRC checking, and verifies that the manifest and its named database are present. It also compares SHA-256 digests of the selected source files before and after each download flow. The successful-download fixtures are empty schema-valid libraries. On 2026-10-15, the production build passed, all 114 unit tests passed, and all 21 browser runs passed (seven each in Chromium, Microsoft Edge, and WebKit). WebKit is automated Safari-engine coverage, not a substitute for testing in Apple's Safari. Successful production downloads remain unavailable by design, and JW Library acceptance/restore has not been verified.
 
 Run `npm run test:e2e` to execute all browser projects. Use `npm run test:e2e:edge` or `npm run test:e2e:webkit` to rerun one project. Install required local browsers with `npx playwright install chromium webkit`; the Edge project also requires Microsoft Edge Stable to be installed. On CI, the workflow installs Chromium, Edge, and WebKit before running each project.
 
