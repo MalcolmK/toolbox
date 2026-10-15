@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 — 2026-10-15
+
+- Limited automatic GitHub Pages deployments to pushes to `main`; manual deployment remains available through `workflow_dispatch`.
+- Increased the timeout for the WebKit note-conflict end-to-end flow, which exceeded Playwright's 30-second default in CI.
+
 ## 0.2.1 — 2026-10-15
 
 - Regenerated the npm lockfile from `package.json`, including all optional Rolldown platform bindings such as the Linux x64 GNU binding required by GitHub Actions; npm refreshed transitive versions within the existing dependency ranges.

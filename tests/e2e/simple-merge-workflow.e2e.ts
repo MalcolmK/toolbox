@@ -120,6 +120,7 @@ test("reviews conflicts one at a time with source values, timestamps, and revers
 });
 
 test("compares note blocks by default, supports line choices, both variants, and explicit manual text", async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto("#library-merger");
   await page.getByRole("radio", { name: "Geavanceerd" }).check();
   await page.getByLabel("Kies .jwlibrary-bestand als basisversie", { exact: true }).setInputFiles(fixture("base.jwlibrary"));
