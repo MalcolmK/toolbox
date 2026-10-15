@@ -147,6 +147,13 @@ test("compares note blocks by default, supports line choices, both variants, and
   await manualEditor.fill("Zelf gekozen tekst ☀️\nlaatste regel");
   await expect(textReview.locator("[class*=textSelectionPreview]")).toContainText("Zelf gekozen tekst ☀️");
   await expect(page.getByRole("region", { name: "Voorlopig informatieverlies" }).getByText(/Handmatige tekst vervangt de bronfragmenten/)).toBeVisible();
+  const firstNextItem = review.getByRole("button", { name: "Volgend conflict" });
+  await expect(firstNextItem).toBeEnabled();
+  await firstNextItem.click();
+  await expect(review.getByText(/Item 2 van/)).toBeVisible();
+  await review.getByRole("button", { name: "Vorig conflict" }).click();
+  await expect(review.getByText(/Item 1 van/)).toBeVisible();
+  await expect(textReview.getByRole("textbox", { name: "Handmatig samengestelde tekst" })).toHaveValue("Zelf gekozen tekst ☀️\nlaatste regel");
   for (let index = 0; index < 20; index += 1) {
     const nextItem = review.getByRole("button", { name: "Volgend conflict" });
     if (!(await nextItem.isEnabled())) break;
@@ -154,12 +161,6 @@ test("compares note blocks by default, supports line choices, both variants, and
     const wholeRecordChoice = review.getByRole("group", { name: "Keuze voor dit conflict" });
     if (await wholeRecordChoice.count()) await wholeRecordChoice.getByRole("button", { name: "Behoud A" }).click();
   }
-  for (let index = 0; index < 20; index += 1) {
-    const previousItem = review.getByRole("button", { name: "Vorig conflict" });
-    if (!(await previousItem.isEnabled())) break;
-    await previousItem.click();
-  }
-  await expect(textReview.getByRole("textbox", { name: "Handmatig samengestelde tekst" })).toHaveValue("Zelf gekozen tekst ☀️\nlaatste regel");
   await expect(page.getByRole("button", { name: "Besluiten afronden" })).toBeEnabled();
   await page.getByRole("button", { name: "Besluiten afronden" }).click();
   await expect(page.getByText(/Alle vereiste beslissingen zijn ingevuld/)).toBeVisible();
