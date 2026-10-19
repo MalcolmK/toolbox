@@ -1,6 +1,7 @@
 import type { SqlValue } from "sql.js";
 import type { UserDataRow, UserDataSnapshot } from "../database/readUserData";
 import { compareLibraries, type ComparedRecord, type ComparisonStatus } from "../compare/compareLibraries";
+import { findSnapshotRowByLocalId } from "../compare/recordIdentity";
 import { normalizeTimestamp, type NormalizedTimestamp } from "../compare/normalizeTimestamp";
 import type { LocationResolutionContext } from "./locationResolution";
 import type { PlaylistResolutionContext } from "./playlistResolution";
@@ -341,7 +342,7 @@ export function simpleMerge(
     if (compared.tableName === "BlockRange" && (sourceA || sourceB)) {
       const range = sourceA ?? sourceB!;
       const sourceSnapshot = range.source === "A" ? snapshotA : snapshotB;
-      const mark = sourceSnapshot.tables.UserMark?.rows.find((row) => row.UserMarkId === range.row.UserMarkId);
+      const mark = findSnapshotRowByLocalId(sourceSnapshot, "UserMark", "UserMarkId", range.row.UserMarkId);
       const markGuid = typeof mark?.UserMarkGuid === "string" ? mark.UserMarkGuid : null;
       const winner = markGuid ? rangeSetWinners.get(markGuid) : undefined;
       if (winner && range.source !== winner && (!sourceA || !sourceB)) {

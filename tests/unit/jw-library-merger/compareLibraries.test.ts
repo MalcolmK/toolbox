@@ -5,6 +5,8 @@ import { readJwLibrary } from "../../../src/tools/jw-library-merger/archive/read
 import { readUserData } from "../../../src/tools/jw-library-merger/database/readUserData";
 import { validateUserData } from "../../../src/tools/jw-library-merger/database/validateUserData";
 import { compareLibraries } from "../../../src/tools/jw-library-merger/compare/compareLibraries";
+import { simpleMerge } from "../../../src/tools/jw-library-merger/merge/simpleMerge";
+import type { UserDataSnapshot } from "../../../src/tools/jw-library-merger/database/readUserData";
 import { confirmLocationProposal, createLocationResolutionContext } from "../../../src/tools/jw-library-merger/merge/locationResolution";
 
 const fixtureUrl = (name: string) => new URL(`../../fixtures/jw-library/${name}`, import.meta.url);
@@ -21,7 +23,59 @@ async function readSnapshot(name: string) {
   return { snapshot: readUserData(validated), close: () => validated.database.close() };
 }
 
+function withManyMarkRanges(snapshot: UserDataSnapshot, source: "A" | "B", count: number): UserDataSnapshot {
+  const markTemplate = snapshot.tables.UserMark!.rows[0]!;
+  const rangeTemplate = snapshot.tables.BlockRange!.rows[0]!;
+  const idOffset = source === "A" ? 0 : 50_000;
+  const marks = Array.from({ length: count }, (_, index) => ({
+    ...markTemplate,
+    UserMarkId: idOffset + index + 1,
+    UserMarkGuid: `large-fixture-mark-${index + 1}`,
+  }));
+  const ranges = Array.from({ length: count }, (_, index) => ({
+    ...rangeTemplate,
+    BlockRangeId: idOffset + index + 1,
+    UserMarkId: idOffset + index + 1,
+  }));
+  return {
+    ...snapshot,
+    sourceFileName: `large-fixture-${source}`,
+    recordCounts: { ...snapshot.recordCounts, UserMark: count, BlockRange: count },
+    tables: {
+      ...snapshot.tables,
+      UserMark: { ...snapshot.tables.UserMark!, rows: marks, rowCount: marks.length },
+      BlockRange: { ...snapshot.tables.BlockRange!, rows: ranges, rowCount: ranges.length },
+    },
+  };
+}
+
 describe("compareLibraries", () => {
+  it("compares and plans 19,044 mark ranges without rescanning the full relationship tables", async () => {
+    const baseA = await readSnapshot("base.jwlibrary");
+    const baseB = await readSnapshot("base.jwlibrary");
+    try {
+      const snapshotA = withManyMarkRanges(baseA.snapshot, "A", 19_044);
+      const snapshotB = withManyMarkRanges(baseB.snapshot, "B", 19_044);
+      const locations = createLocationResolutionContext("large-mark-session", "large-mark-pair", snapshotA, snapshotB);
+      const locationDecision = confirmLocationProposal(locations, locations.proposals[0]!.id,
+        "large-mark-session", 0, snapshotA, snapshotB, "A");
+      if (!locationDecision.ok) throw new Error(locationDecision.reason);
+      const started = performance.now();
+      const plan = simpleMerge(snapshotA, snapshotB, new Map(), locationDecision.context);
+      const elapsedMs = performance.now() - started;
+
+      expect(elapsedMs, "large-table comparison and planning should finish without a long browser-style stall")
+        .toBeLessThan(10_000);
+      expect(plan.records.filter((record) => record.tableName === "UserMark")).toHaveLength(19_044);
+      expect(plan.records.filter((record) => record.tableName === "BlockRange")).toHaveLength(19_044);
+      expect(plan.records.filter((record) => record.tableName === "BlockRange")
+        .every((record) => record.action === "keep-one")).toBe(true);
+    } finally {
+      baseA.close();
+      baseB.close();
+    }
+  }, 30_000);
+
   it("reports equal stable records without choosing merge winners", async () => {
     const a = await readSnapshot("identical-a.jwlibrary");
     const b = await readSnapshot("identical-b.jwlibrary");

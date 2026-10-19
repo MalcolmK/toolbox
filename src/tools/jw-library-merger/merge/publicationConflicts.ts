@@ -22,11 +22,21 @@ export function simpleMergeReviewKey(tableName: string, identityKey: string): st
   return `${tableName}:${identityKey}`;
 }
 
+const locationIndexes = new WeakMap<UserDataSnapshot, Map<unknown, UserDataRow>>();
+function locationById(snapshot: UserDataSnapshot, id: unknown): UserDataRow | null {
+  if (id === null || id === undefined) return null;
+  let index = locationIndexes.get(snapshot);
+  if (!index) {
+    index = new Map((snapshot.tables.Location?.rows ?? []).map((row) => [row.LocationId, row]));
+    locationIndexes.set(snapshot, index);
+  }
+  return index.get(id) ?? null;
+}
+
 function locationFor(snapshot: UserDataSnapshot, row: UserDataRow): UserDataRow | null {
-  const table = snapshot.tables.Location;
   const localId = row.LocationId ?? row.PublicationLocationId;
-  if (!table || (typeof localId !== "number" && typeof localId !== "string")) return null;
-  return table.rows.find((location) => location.LocationId === localId) ?? null;
+  if (typeof localId !== "number" && typeof localId !== "string") return null;
+  return locationById(snapshot, localId);
 }
 
 function publicationKey(
@@ -64,12 +74,13 @@ export function getPublicationConflictGroups(
     differences: PublicationConflictGroup["differences"][number][];
   }>();
   const [sourceA, sourceB] = preview.sources;
+  const recordsByComparison = new Map(preview.mergePlan.records.map((record) => [
+    `${record.tableName}\u0000${record.identityKey}\u0000${record.comparisonStatus}`, record,
+  ]));
 
   for (const compared of preview.comparison.records) {
     if (compared.tableName === "Location") continue;
-    const record = preview.mergePlan.records.find((item) => item.tableName === compared.tableName
-      && item.identityKey === compared.identityKey
-      && item.comparisonStatus === compared.status);
+    const record = recordsByComparison.get(`${compared.tableName}\u0000${compared.identityKey}\u0000${compared.status}`);
     const isReviewableConflict = compared.status === "possible-conflict"
       || (compared.status === "changed"
         && (record?.action === "needs-review" || record?.confidence === "manual-choice"));

@@ -85,6 +85,8 @@ export interface PlaylistResolutionContext {
   readonly unresolved: readonly PlaylistUnresolvedItem[];
 }
 
+const playlistContextValidation = new WeakMap<PlaylistResolutionContext, boolean>();
+
 export type PlaylistResolutionResult =
   | { readonly ok: true; readonly context: PlaylistResolutionContext }
   | { readonly ok: false; readonly code: "stale-context" | "unknown-proposal" | "changed-source" | "cannot-keep-separate"; readonly reason: string };
@@ -140,6 +142,7 @@ function freezeContext(context: PlaylistResolutionContext): PlaylistResolutionCo
   Object.freeze(context.keptSeparate);
   Object.freeze(context.mediaIdentities);
   Object.freeze(context.unresolved);
+  playlistContextValidation.set(context, true);
   return Object.freeze(context);
 }
 
@@ -163,9 +166,47 @@ function localRowKey(snapshot: UserDataSnapshot, tableName: string, row: UserDat
   return identifyRecord(snapshot, tableName, row).localKey;
 }
 
+const rowsByIdCache = new WeakMap<UserDataSnapshot, Map<string, Map<unknown, UserDataRow>>>();
+
 function byId(snapshot: UserDataSnapshot, tableName: string, idField: string, id: unknown): UserDataRow | null {
   if (id === null || id === undefined) return null;
-  return snapshot.tables[tableName]?.rows.find((row) => row[idField] === id) ?? null;
+  let tableIndexes = rowsByIdCache.get(snapshot);
+  if (!tableIndexes) { tableIndexes = new Map(); rowsByIdCache.set(snapshot, tableIndexes); }
+  const key = `${tableName}\u0000${idField}`;
+  let rows = tableIndexes.get(key);
+  if (!rows) {
+    rows = new Map();
+    for (const row of snapshot.tables[tableName]?.rows ?? []) {
+      const value = row[idField];
+      if (value !== null && value !== undefined && !rows.has(value)) rows.set(value, row);
+    }
+    tableIndexes.set(key, rows);
+  }
+  return rows.get(id) ?? null;
+}
+
+function groupRowsBy(rows: readonly UserDataRow[], field: string): Map<unknown, UserDataRow[]> {
+  const grouped = new Map<unknown, UserDataRow[]>();
+  for (const row of rows) {
+    const key = row[field];
+    const group = grouped.get(key) ?? [];
+    group.push(row);
+    grouped.set(key, group);
+  }
+  return grouped;
+}
+
+function indexRowsBy(snapshot: UserDataSnapshot, tableName: string, field: string): void {
+  const tableIndexes = rowsByIdCache.get(snapshot);
+  if (!tableIndexes) return;
+  const key = `${tableName}\u0000${field}`;
+  if (tableIndexes.has(key)) return;
+  const rows = new Map<unknown, UserDataRow>();
+  for (const row of snapshot.tables[tableName]?.rows ?? []) {
+    const value = row[field];
+    if (value !== null && value !== undefined && !rows.has(value)) rows.set(value, row);
+  }
+  tableIndexes.set(key, rows);
 }
 
 function confirmedPlace(
@@ -175,9 +216,11 @@ function confirmedPlace(
   resolution: LocationResolutionContext,
 ): string | null {
   const table = snapshot.tables.Location;
-  const index = table?.rows.findIndex((row) => row.LocationId === locationId) ?? -1;
-  if (!table || index < 0) return null;
-  return confirmedLocationIdentity(resolution, snapshot, source, table.rows[index]!, index);
+  const row = byId(snapshot, "Location", "LocationId", locationId);
+  if (!table || !row) return null;
+  const index = table.rows.indexOf(row);
+  if (index < 0) return null;
+  return confirmedLocationIdentity(resolution, snapshot, source, row, index);
 }
 
 async function readMedia(
@@ -214,6 +257,7 @@ async function describePlaylist(
   locationResolution: LocationResolutionContext,
   sessionId: string,
   sourcePairId: string,
+  relationships: ReturnType<typeof playlistRelationshipIndexes>,
 ): Promise<PlaylistEvidence> {
   const itemId = item.PlaylistItemId;
   const localKey = localRowKey(snapshot, "PlaylistItem", item);
@@ -238,13 +282,12 @@ async function describePlaylist(
   };
 
   if (item.ThumbnailFilePath !== null && item.ThumbnailFilePath !== undefined) {
-    const thumbnail = snapshot.tables.IndependentMedia?.rows.find((row) => row.FilePath === item.ThumbnailFilePath);
+    const thumbnail = byId(snapshot, "IndependentMedia", "FilePath", item.ThumbnailFilePath);
     if (!thumbnail) throw new Error(`Miniatuurmedia ${String(item.ThumbnailFilePath)} ontbreekt in IndependentMedia.`);
     await useMedia(thumbnail);
   }
 
-  const mediaMaps = await Promise.all((snapshot.tables.PlaylistItemIndependentMediaMap?.rows ?? [])
-    .filter((row) => row.PlaylistItemId === itemId)
+  const mediaMaps = await Promise.all((relationships.mediaByItem.get(itemId) ?? [])
     .map(async (row) => {
       const media = byId(snapshot, "IndependentMedia", "IndependentMediaId", row.IndependentMediaId);
       if (!media) throw new Error("Een mediarelatie verwijst naar een ontbrekend IndependentMedia-record.");
@@ -252,31 +295,27 @@ async function describePlaylist(
       return [evidence.signature, contentColumns(snapshot, "IndependentMedia", media), row.DurationTicks];
     }));
 
-  const locationMaps = (snapshot.tables.PlaylistItemLocationMap?.rows ?? [])
-    .filter((row) => row.PlaylistItemId === itemId)
+  const locationMaps = (relationships.locationsByItem.get(itemId) ?? [])
     .map((row) => {
       const place = confirmedPlace(snapshot, source, row.LocationId, locationResolution);
       if (!place) throw new Error("Een plaatskoppeling is niet door een bevestigde plaatsgroep gedekt.");
       return [place, row.MajorMultimediaType, row.BaseDurationTicks ?? null];
     }).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
 
-  const markerRows = (snapshot.tables.PlaylistItemMarker?.rows ?? [])
-    .filter((row) => row.PlaylistItemId === itemId);
+  const markerRows = relationships.markersByItem.get(itemId) ?? [];
   const markerSummaries: string[] = [];
   const markerStructures = markerRows.map((marker) => {
     const markerId = marker.PlaylistItemMarkerId;
-    const verseMaps = (snapshot.tables.PlaylistItemMarkerBibleVerseMap?.rows ?? [])
-      .filter((row) => row.PlaylistItemMarkerId === markerId)
+    const verseMaps = (relationships.versesByMarker.get(markerId) ?? [])
       .map((row) => row.VerseId).sort((a, b) => String(a).localeCompare(String(b)));
-    const paragraphMaps = (snapshot.tables.PlaylistItemMarkerParagraphMap?.rows ?? [])
-      .filter((row) => row.PlaylistItemMarkerId === markerId)
+    const paragraphMaps = (relationships.paragraphsByMarker.get(markerId) ?? [])
       .map((row) => [row.MepsDocumentId, row.ParagraphIndex, row.MarkerIndexWithinParagraph])
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
     markerSummaries.push(`${scalar(marker.Label)} · ${scalar(marker.StartTimeTicks)} ticks · ${verseMaps.length} verskoppeling(en) · ${paragraphMaps.length} alineakoppeling(en)`);
     return [contentColumns(snapshot, "PlaylistItemMarker", marker), verseMaps, paragraphMaps];
   }).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 
-  const tagRows = (snapshot.tables.TagMap?.rows ?? []).filter((row) => row.PlaylistItemId === itemId);
+  const tagRows = relationships.tagsByItem.get(itemId) ?? [];
   const tags = tagRows.map((mapping) => {
     const tag = byId(snapshot, "Tag", "TagId", mapping.TagId);
     if (!tag) throw new Error("Een afspeellijstlabel verwijst naar een ontbrekend label.");
@@ -335,6 +374,16 @@ function itemKey(reference: PlaylistSourceReference): string {
   return `${reference.source}:${reference.localKey}`;
 }
 
+function mediaPathIndex(items: readonly PlaylistEvidence[]): Map<string, PlaylistEvidence[]> {
+  const byPath = new Map<string, PlaylistEvidence[]>();
+  for (const item of items) for (const media of item.media) {
+    const entries = byPath.get(media.path) ?? [];
+    entries.push(item);
+    byPath.set(media.path, entries);
+  }
+  return byPath;
+}
+
 function payloadsEqual(a: PlaylistEvidence, b: PlaylistEvidence): boolean {
   return a.payloads.length === b.payloads.length
     && a.payloads.every((payload, index) => exactBytesEqual(payload, b.payloads[index]!));
@@ -345,8 +394,7 @@ function sameMediaMetadata(a: MediaEvidence, b: MediaEvidence): boolean {
 }
 
 function duplicateUniqueTagMapPosition(snapshotA: UserDataSnapshot, a: PlaylistEvidence, snapshotB: UserDataSnapshot, b: PlaylistEvidence): boolean {
-  const tagKeys = (snapshot: UserDataSnapshot, id: number) => (snapshot.tables.TagMap?.rows ?? [])
-    .filter((row) => row.PlaylistItemId === id)
+  const tagKeys = (snapshot: UserDataSnapshot, id: number) => (groupRowsBy(snapshot.tables.TagMap?.rows ?? [], "PlaylistItemId").get(id) ?? [])
     .flatMap((mapping) => {
       const tag = byId(snapshot, "Tag", "TagId", mapping.TagId);
       return tag ? [`${JSON.stringify(contentColumns(snapshot, "Tag", tag))}:${String(mapping.Position)}`] : [];
@@ -430,23 +478,28 @@ export async function createPlaylistResolutionContext(
     }
   }
   const allItems = [...structuresA.items, ...structuresB.items];
+  const unresolvedKeys = new Set(unresolved.map((item) => `${item.source}:${item.localKey}`));
   for (const evidence of allItems) {
     if (paired.has(itemKey(evidence.reference))) continue;
-    if (unresolved.some((item) => item.source === evidence.reference.source && item.localKey === evidence.reference.localKey)) continue;
+    if (unresolvedKeys.has(itemKey(evidence.reference))) continue;
     unresolved.push({ source: evidence.reference.source, localKey: evidence.reference.localKey,
       label: evidence.summary.label,
       reason: "Er is geen unieke volledige overeenkomst in de andere bron. Vergelijk de hele structuur; automatische koppeling is niet beschikbaar.",
       summary: evidence.summary });
+    unresolvedKeys.add(itemKey(evidence.reference));
   }
 
+  const itemsByLocalKey = new Map(allItems.map((item) => [`${item.reference.source}:${item.reference.localKey}`, item]));
+  const mediaPathsA = mediaPathIndex(structuresA.items);
+  const mediaPathsB = mediaPathIndex(structuresB.items);
   for (let index = 0; index < unresolved.length; index++) {
     const issue = unresolved[index]!;
-    const own = (issue.source === "A" ? structuresA.items : structuresB.items)
-      .find((item) => item.reference.localKey === issue.localKey);
+    const own = itemsByLocalKey.get(`${issue.source}:${issue.localKey}`);
     if (!own) continue;
-    const other = issue.source === "A" ? structuresB.items : structuresA.items;
-    const pathConflict = own.media.some((media) => other.some((candidate) => candidate.media.some((otherMedia) =>
-      otherMedia.path === media.path && !sameMediaMetadata(media, otherMedia))));
+    const otherByPath = issue.source === "A" ? mediaPathsB : mediaPathsA;
+    const pathConflict = own.media.some((media) => (otherByPath.get(media.path) ?? [])
+      .some((candidate) => candidate.media.some((otherMedia) =>
+        otherMedia.path === media.path && !sameMediaMetadata(media, otherMedia))));
     if (pathConflict) unresolved[index] = { ...issue, canKeepSeparate: false,
       reason: "Hetzelfde ZIP-mediapad wordt met afwijkende media-inhoud of metadata gebruikt; afzonderlijke uitvoerrijen zouden het unieke mediapad laten botsen." };
   }
@@ -477,18 +530,34 @@ async function buildStructures(
   sessionId: string,
   sourcePairId: string,
 ): Promise<{ items: PlaylistEvidence[]; issues: PlaylistUnresolvedItem[] }> {
+  for (const [tableName, field] of [
+    ["PlaylistItemAccuracy", "PlaylistItemAccuracyId"], ["IndependentMedia", "IndependentMediaId"],
+    ["IndependentMedia", "FilePath"], ["PlaylistItem", "PlaylistItemId"], ["Location", "LocationId"], ["Tag", "TagId"],
+  ] as const) indexRowsBy(snapshot, tableName, field);
+  const relationships = playlistRelationshipIndexes(snapshot);
   const items: PlaylistEvidence[] = [];
   const issues: PlaylistUnresolvedItem[] = [];
   for (const row of snapshot.tables.PlaylistItem?.rows ?? []) {
     const localKey = localRowKey(snapshot, "PlaylistItem", row);
     try {
-      items.push(await describePlaylist(snapshot, library, source, row, locationResolution, sessionId, sourcePairId));
+      items.push(await describePlaylist(snapshot, library, source, row, locationResolution, sessionId, sourcePairId, relationships));
     } catch (cause) {
       issues.push({ source, localKey, label: typeof row.Label === "string" ? row.Label : "Afspeellijst zonder label",
         reason: cause instanceof Error ? cause.message : "De volledige afspeellijststructuur kon niet worden gecontroleerd.", summary: null });
     }
   }
   return { items, issues };
+}
+
+function playlistRelationshipIndexes(snapshot: UserDataSnapshot) {
+  return {
+    mediaByItem: groupRowsBy(snapshot.tables.PlaylistItemIndependentMediaMap?.rows ?? [], "PlaylistItemId"),
+    locationsByItem: groupRowsBy(snapshot.tables.PlaylistItemLocationMap?.rows ?? [], "PlaylistItemId"),
+    markersByItem: groupRowsBy(snapshot.tables.PlaylistItemMarker?.rows ?? [], "PlaylistItemId"),
+    versesByMarker: groupRowsBy(snapshot.tables.PlaylistItemMarkerBibleVerseMap?.rows ?? [], "PlaylistItemMarkerId"),
+    paragraphsByMarker: groupRowsBy(snapshot.tables.PlaylistItemMarkerParagraphMap?.rows ?? [], "PlaylistItemMarkerId"),
+    tagsByItem: groupRowsBy(snapshot.tables.TagMap?.rows ?? [], "PlaylistItemId"),
+  };
 }
 
 function createMediaIdentities(itemsA: readonly PlaylistEvidence[], itemsB: readonly PlaylistEvidence[], sourcePairId: string): PlaylistMediaIdentity[] {
@@ -522,6 +591,10 @@ export function isPlaylistResolutionContextCurrent(
   libraryB: LoadedJwLibrary,
   locationResolution: LocationResolutionContext,
 ): boolean {
+  if (playlistContextValidation.get(context) && context.sourceSnapshots.A === snapshotA
+    && context.sourceSnapshots.B === snapshotB && context.sourceLibraries.A === libraryA
+    && context.sourceLibraries.B === libraryB && context.locationRevision === locationResolution.revision
+    && context.locationResolution === locationResolution) return true;
   return context.sourceSnapshots.A === snapshotA && context.sourceSnapshots.B === snapshotB
     && context.sourceLibraries.A === libraryA && context.sourceLibraries.B === libraryB
     && context.locationRevision === locationResolution.revision

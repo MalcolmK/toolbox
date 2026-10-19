@@ -1,7 +1,7 @@
 import type { SqlValue } from "sql.js";
 import { confirmedLocationIdentity, separateLocationIdentity, type LocationResolutionContext, type LocationSource } from "../merge/locationResolution";
 import type { UserDataRow, UserDataSnapshot } from "../database/readUserData";
-import { identifyRecord, type RecordIdentity } from "./recordIdentity";
+import { blockRangeIdentityCount, findSnapshotRowByLocalId, identifyRecord, type RecordIdentity } from "./recordIdentity";
 import { playlistItemIdentity, playlistMediaIdentity, type PlaylistResolutionContext } from "../merge/playlistResolution";
 
 function tuple(table: string, strategy: string, values: readonly (SqlValue | undefined)[]): string | null {
@@ -10,8 +10,19 @@ function tuple(table: string, strategy: string, values: readonly (SqlValue | und
 }
 
 function idLookup(snapshot: UserDataSnapshot, table: string, idField: string, value: SqlValue | undefined): UserDataRow | null {
-  if (value === null || value === undefined) return null;
-  return snapshot.tables[table]?.rows.find((row) => row[idField] === value) ?? null;
+  return findSnapshotRowByLocalId(snapshot, table, idField, value) ?? null;
+}
+
+const locationIndexes = new WeakMap<UserDataSnapshot, WeakMap<UserDataRow, number>>();
+
+function locationRowIndex(snapshot: UserDataSnapshot, row: UserDataRow): number {
+  let rows = locationIndexes.get(snapshot);
+  if (!rows) {
+    rows = new WeakMap<UserDataRow, number>();
+    snapshot.tables.Location?.rows.forEach((location, index) => rows!.set(location, index));
+    locationIndexes.set(snapshot, rows);
+  }
+  return rows.get(row) ?? -1;
 }
 
 function locationIdentity(
@@ -21,7 +32,7 @@ function locationIdentity(
   context?: LocationResolutionContext,
 ): RecordIdentity | null {
   if (!row) return null;
-  const index = snapshot.tables.Location?.rows.indexOf(row) ?? -1;
+  const index = locationRowIndex(snapshot, row);
   if (index < 0) return null;
   const base = identifyRecord(snapshot, "Location", row, index);
   const confirmed = confirmedLocationIdentity(context, snapshot, source, row, index);
@@ -78,14 +89,28 @@ function blockRangeIdentity(snapshot: UserDataSnapshot, row: UserDataRow): Recor
   const markGuid = markIdentity(snapshot, row);
   if (!markGuid || !base.key) return { ...base, key: null, status: "uncertain", canMatchAcrossBackups: false,
     reason: "Het bereik heeft geen stabiele bovenliggende UserMarkGuid." };
-  const duplicates = (snapshot.tables.BlockRange?.rows ?? []).filter((candidate) => {
-    const candidateKey = identifyRecord(snapshot, "BlockRange", candidate).key;
-    return candidateKey === base.key;
-  }).length;
+  const duplicates = blockRangeIdentityCount(snapshot, base.key);
   if (duplicates !== 1) return { ...base, key: null, status: "uncertain", canMatchAcrossBackups: false,
     reason: "De bereikcoördinaten komen meer dan eenmaal onder dezelfde markering voor." };
   return { ...base, status: "stable", canMatchAcrossBackups: true,
     reason: "De bereikcoördinaten zijn uniek onder een stabiel geïdentificeerde markering." };
+}
+
+const blockRangesByMark = new WeakMap<UserDataSnapshot, Map<SqlValue, readonly UserDataRow[]>>();
+
+function blockRangeRowsByMark(snapshot: UserDataSnapshot): Map<SqlValue, readonly UserDataRow[]> {
+  const cached = blockRangesByMark.get(snapshot);
+  if (cached) return cached;
+  const rowsByMark = new Map<SqlValue, UserDataRow[]>();
+  for (const row of snapshot.tables.BlockRange?.rows ?? []) {
+    const markId = row.UserMarkId;
+    if (markId === null || markId === undefined) continue;
+    const rows = rowsByMark.get(markId) ?? [];
+    rows.push(row);
+    rowsByMark.set(markId, rows);
+  }
+  blockRangesByMark.set(snapshot, rowsByMark);
+  return rowsByMark;
 }
 
 export function blockRangeSet(snapshot: UserDataSnapshot, userMarkId: SqlValue | undefined): {
@@ -95,9 +120,8 @@ export function blockRangeSet(snapshot: UserDataSnapshot, userMarkId: SqlValue |
 } | null {
   const mark = idLookup(snapshot, "UserMark", "UserMarkId", userMarkId);
   const guid = typeof mark?.UserMarkGuid === "string" ? mark.UserMarkGuid : null;
-  if (guid === null) return null;
-  const keys = (snapshot.tables.BlockRange?.rows ?? [])
-    .filter((row) => row.UserMarkId === userMarkId)
+  if (guid === null || userMarkId === null || userMarkId === undefined) return null;
+  const keys = (blockRangeRowsByMark(snapshot).get(userMarkId) ?? [])
     .map((row) => JSON.stringify([guid, row.BlockType, row.Identifier, row.StartToken, row.EndToken]));
   const duplicate = new Set(keys).size !== keys.length;
   return { key: JSON.stringify(keys.sort()), duplicate, count: keys.length };

@@ -30,6 +30,8 @@ the fixtures are not claimed to be importable by JW Library.
 | `missing-database.jwlibrary` | ZIP with manifest but no database entry. |
 | `unsupported-schema-version.jwlibrary` | Valid synthetic archive declaring an unsupported schema version. |
 | `corrupt-database.jwlibrary` | Valid ZIP and manifest with non-SQLite database bytes. |
+| `large-merge-a.jwlibrary` + `large-merge-b.jwlibrary` | Two schema-valid synthetic backups, each about 3,000 kB, with different source-local location IDs and the same deterministic 2,990,000-byte incompressible test entry. Used by standard unit and browser tests for reading, comparison, merge build, download, and archive re-open checks. |
+| `large-merge-a.jwlibrary` + `large-merge-b.jwlibrary` | Two synthetic backups, each about 3,000 kB. Standard browser coverage checks comparison responsiveness and validates the downloaded archive bytes; no data from user backups is stored in the fixtures. |
 | `manifest-valid-v16.json` + `manifest-invalid.json` | Standalone valid and malformed JSON inputs. |
 
 ## Expected row counts for readable schema-version-16 fixtures

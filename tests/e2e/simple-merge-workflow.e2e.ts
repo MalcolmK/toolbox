@@ -115,8 +115,78 @@ async function inspectDownloadedJwLibrary(download: Download) {
   expect(databaseBytes).toBeTruthy();
   expect(manifest.userDataBackup?.hash).toBeTruthy();
   const playlistMedia = await archive.file("playlist-media.bin")?.async("uint8array");
-  return { entryNames: Object.keys(archive.files).filter((name) => !archive.files[name]?.dir), manifest, databaseBytes, playlistMedia };
+  const syntheticLoadPayload = await archive.file("synthetic-load.bin")?.async("uint8array");
+  return { entryNames: Object.keys(archive.files).filter((name) => !archive.files[name]?.dir), manifest, databaseBytes, playlistMedia, syntheticLoadPayload };
 }
+
+test("compares two approximately 3,000 kB backups and downloads an intact merged archive", async ({ page }) => {
+  test.setTimeout(120_000);
+  const [sourceA, sourceB] = await Promise.all([
+    readFile(fixture("large-merge-a.jwlibrary")),
+    readFile(fixture("large-merge-b.jwlibrary")),
+  ]);
+  const sourceArchive = await JSZip.loadAsync(sourceA, { checkCRC32: true });
+  const expectedPayload = await sourceArchive.file("synthetic-load.bin")?.async("uint8array");
+  if (!expectedPayload) throw new Error("De grote synthetische testentry ontbreekt in back-up A.");
+  expect(sourceA.byteLength).toBeGreaterThan(2_900_000);
+  expect(sourceA.byteLength).toBeLessThan(3_100_000);
+  expect(sourceB.byteLength).toBeGreaterThan(2_900_000);
+  expect(sourceB.byteLength).toBeLessThan(3_100_000);
+
+  await page.goto("#library-merger");
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up A").setInputFiles(fixture("large-merge-a.jwlibrary"));
+  await page.getByLabel("Kies een .jwlibrary-bestand voor Back-up B").setInputFiles(fixture("large-merge-b.jwlibrary"));
+  const digestsBefore = await selectedSourceDigests(page);
+  await page.evaluate(() => {
+    type LoadProbe = { lastTick: number; maxGap: number; intervalId: number };
+    const target = window as Window & { __loadProbe?: LoadProbe };
+    const probe: LoadProbe = { lastTick: performance.now(), maxGap: 0, intervalId: 0 };
+    probe.intervalId = window.setInterval(() => {
+      const now = performance.now();
+      probe.maxGap = Math.max(probe.maxGap, now - probe.lastTick);
+      probe.lastTick = now;
+    }, 100);
+    target.__loadProbe = probe;
+  });
+  await page.getByRole("button", { name: "Vergelijk back-ups" }).click();
+
+  const placeCard = page.locator("article[class*=locationCard]").first();
+  const confirmPlace = placeCard.getByRole("button", { name: "Deze getoonde plekken horen bij dezelfde publicatie." });
+  await expect(confirmPlace).toBeEnabled({ timeout: 60_000 });
+  const comparisonGap = await page.evaluate(() => {
+    type LoadProbe = { lastTick: number; maxGap: number; intervalId: number };
+    const target = window as Window & { __loadProbe?: LoadProbe };
+    const probe = target.__loadProbe;
+    if (!probe) throw new Error("De grote-bestandenresponsiviteitsmeting ontbreekt.");
+    const maxGap = probe.maxGap;
+    probe.maxGap = 0;
+    probe.lastTick = performance.now();
+    return maxGap;
+  });
+  expect(comparisonGap, "the browser event loop remains responsive while comparing large files").toBeLessThan(5_000);
+  await confirmPlace.click();
+  const buildButton = page.getByRole("button", { name: "3. Maak mergebestand" });
+  await expect(buildButton).toBeVisible();
+  await buildButton.click();
+
+  const downloadButton = page.getByRole("button", { name: /Download POC-bestand · JWLibrary-Merged-/ });
+  await expect(downloadButton).toBeEnabled({ timeout: 60_000 });
+  const buildGap = await page.evaluate(() => {
+    type LoadProbe = { lastTick: number; maxGap: number; intervalId: number };
+    const target = window as Window & { __loadProbe?: LoadProbe };
+    const probe = target.__loadProbe;
+    if (!probe) throw new Error("De grote-bestandenresponsiviteitsmeting ontbreekt.");
+    window.clearInterval(probe.intervalId);
+    return probe.maxGap;
+  });
+  expect(buildGap, "the browser event loop remains responsive while building the large archive").toBeLessThan(5_000);
+  const downloadPromise = page.waitForEvent("download");
+  await downloadButton.click();
+  const output = await inspectDownloadedJwLibrary(await downloadPromise);
+  expect(output.entryNames).toContain("synthetic-load.bin");
+  expect(Buffer.from(output.syntheticLoadPayload ?? [])).toEqual(expectedPayload);
+  expect(await selectedSourceDigests(page)).toEqual(digestsBefore);
+});
 
 test("builds a populated archive through the reviewed browser flow and matches the frozen expectation", async ({ page }) => {
   const requestBodies: string[] = [];

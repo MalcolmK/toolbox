@@ -324,6 +324,18 @@ const playlistDuplicate = createDatabase({ playlist: { itemId: 10, mediaId: 10, 
 const playlistSingle = createDatabase({ playlist: { itemId: 80, mediaId: 80, markerId: 80, accuracyId: 91, omitTag: true } });
 const playlistDifferentChoice = createDatabase({ playlist: { itemId: 10, mediaId: 10, markerId: 10, omitTag: true } });
 const playlistMedia = new TextEncoder().encode("synthetic media bytes; not playable content");
+function createSyntheticLoadPayload(byteLength) {
+  const bytes = new Uint8Array(byteLength);
+  let state = 0x6d2b79f5;
+  for (let index = 0; index < bytes.length; index += 1) {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    bytes[index] = state & 0xff;
+  }
+  return bytes;
+}
+const syntheticLoadPayload = createSyntheticLoadPayload(2_990_000);
 const populatedFlowA = createDatabase({
   publicationConflictSet: true,
   includeUncertainPlaylist: false,
@@ -390,6 +402,8 @@ await writeArchive("playlist-single-b.jwlibrary", { databaseBytes: playlistSingl
 await writeArchive("playlist-different-choice-a.jwlibrary", { databaseBytes: playlistDifferentChoice, extraFiles: { "playlist-media.bin": playlistMedia } });
 await writeArchive("populated-flow-a.jwlibrary", { databaseBytes: populatedFlowA, manifest: makeManifest("2026-10-11T11:00:00Z"), extraFiles: { "playlist-media.bin": playlistMedia } });
 await writeArchive("populated-flow-b.jwlibrary", { databaseBytes: populatedFlowB, manifest: makeManifest("2026-10-11T12:00:00Z"), extraFiles: { "playlist-media.bin": playlistMedia } });
+await writeArchive("large-merge-a.jwlibrary", { databaseBytes: baseDatabase, extraFiles: { "synthetic-load.bin": syntheticLoadPayload } });
+await writeArchive("large-merge-b.jwlibrary", { databaseBytes: differentLocalIdsDatabase, extraFiles: { "synthetic-load.bin": syntheticLoadPayload } });
 await writeArchive("missing-manifest.jwlibrary", {
   databaseBytes: baseDatabase,
   includeManifest: false,
