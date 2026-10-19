@@ -124,6 +124,14 @@ export function createLocationResolutionContext(
     }
     return map;
   });
+  const rowsByComparisonKey = sourceRows.map((rows) => {
+    const map = new Map<string, typeof rows[number]>();
+    for (const entry of rows) {
+      const key = entry.descriptor.comparisonKey;
+      if (key && !map.has(key)) map.set(key, entry);
+    }
+    return map;
+  });
   const proposals: LocationProposal[] = [];
   const unresolved: LocationUnresolvedItem[] = [];
   for (let side = 0; side < 2; side += 1) {
@@ -139,7 +147,7 @@ export function createLocationResolutionContext(
         unresolved.push({ source, localKey: entry.localKey, comparisonKey: key,
           reason: "De volledige plaatsbeschrijving komt meer dan eenmaal voor in deze bron." });
       } else if (counts[otherSide]!.get(key) === 1 && source === "A") {
-        const other = sourceRows[otherSide]!.find((candidate) => candidate.descriptor.comparisonKey === key);
+        const other = rowsByComparisonKey[otherSide]!.get(key);
         const keyA = entry.localKey;
         const keyB = other?.localKey;
         if (keyA && keyB && other?.descriptor.recordForm) proposals.push({

@@ -45,7 +45,35 @@ function withLocations(base: UserDataSnapshot, fileName: string, rows: readonly 
     recordCounts: { ...base.recordCounts, Location: rows.length } };
 }
 
+function manyDistinctPlaces(base: UserDataSnapshot, source: "A" | "B", count: number): UserDataSnapshot {
+  const offset = source === "A" ? 0 : 100_000;
+  const rows = Array.from({ length: count }, (_, index) => documentPlace(offset + index + 1, {
+    KeySymbol: `fixture-${index + 1}`,
+    DocumentId: index + 1,
+  }));
+  return withLocations(base, `location-fixture-${source}`, rows);
+}
+
 describe("session-scoped Location resolution", () => {
+  it("indexes large exact-place sets instead of rescanning every location pair", async () => {
+    const a = await snapshot("identical-a.jwlibrary");
+    const b = await snapshot("identical-b.jwlibrary");
+    try {
+      const sourceA = manyDistinctPlaces(a.value, "A", 8_000);
+      const sourceB = manyDistinctPlaces(b.value, "B", 8_000);
+      const started = performance.now();
+      const context = createLocationResolutionContext("large-location-session", "large-location-pair", sourceA, sourceB);
+      const elapsedMs = performance.now() - started;
+
+      expect(context.proposals).toHaveLength(8_000);
+      expect(context.unresolved).toHaveLength(0);
+      expect(elapsedMs).toBeLessThan(5_000);
+    } finally {
+      a.close();
+      b.close();
+    }
+  }, 30_000);
+
   it("proposes only an exact unique supported pair and makes a confirmation affect comparison", async () => {
     const a = await snapshot("identical-a.jwlibrary");
     const b = await snapshot("identical-b.jwlibrary");

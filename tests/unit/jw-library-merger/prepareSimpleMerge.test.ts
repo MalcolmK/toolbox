@@ -29,6 +29,34 @@ describe("prepareSimpleMerge", () => {
       && record.selected?.row.Title === "Added synthetic note")).toBe(true);
   });
 
+  it("processes two approximately 3,000 kB synthetic archives and retains their shared large entry", async () => {
+    const [bytesA, bytesB] = await Promise.all([
+      readFile(fixtureUrl("large-merge-a.jwlibrary")),
+      readFile(fixtureUrl("large-merge-b.jwlibrary")),
+    ]);
+    expect(bytesA.byteLength).toBeGreaterThan(2_900_000);
+    expect(bytesA.byteLength).toBeLessThan(3_100_000);
+    expect(bytesB.byteLength).toBeGreaterThan(2_900_000);
+    expect(bytesB.byteLength).toBeLessThan(3_100_000);
+    const [fileA, fileB] = await Promise.all([
+      fixtureFile("large-merge-a.jwlibrary"),
+      fixtureFile("large-merge-b.jwlibrary"),
+    ]);
+    const result = await prepareSimpleMerge(fileA, fileB, sqliteLoader);
+
+    expect(result.sources.map((source) => source.schemaVersion)).toEqual([16, 16]);
+    expect(result.sources.map((source) => source.archive.entryNames)).toEqual([
+      expect.arrayContaining(["synthetic-load.bin"]),
+      expect.arrayContaining(["synthetic-load.bin"]),
+    ]);
+    const [payloadA, payloadB] = await Promise.all(result.sources.map(async (source) =>
+      source.archive.archive.file("synthetic-load.bin")?.async("uint8array")));
+    expect(payloadA?.byteLength).toBe(2_990_000);
+    expect(payloadB).toEqual(payloadA);
+    expect(result.locationResolution.proposals).toHaveLength(1);
+    expect(result.mergePlan.status).toBe("needs-review");
+  });
+
   it("returns source-specific validation failures and does not attempt a merge", async () => {
     const fileA = await fixtureFile("base.jwlibrary");
     const fileB = await fixtureFile("missing-manifest.jwlibrary");

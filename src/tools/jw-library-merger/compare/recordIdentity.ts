@@ -185,7 +185,33 @@ function findByLocalId(
   id: SqlValue | undefined,
 ): UserDataRow | undefined {
   if (id === null || id === undefined) return undefined;
-  return getSnapshotIdentityIndexes(snapshot).localRows.get(`${tableName}\u0000${idColumn}`)?.get(id);
+  const indexes = getSnapshotIdentityIndexes(snapshot).localRows;
+  const indexKey = `${tableName}\u0000${idColumn}`;
+  let rowsById = indexes.get(indexKey);
+  if (!rowsById) {
+    rowsById = new Map<SqlValue, UserDataRow>();
+    for (const row of snapshot.tables[tableName]?.rows ?? []) {
+      const value = row[idColumn];
+      if (value !== null && value !== undefined && !rowsById.has(value)) rowsById.set(value, row);
+    }
+    indexes.set(indexKey, rowsById);
+  }
+  return rowsById.get(id);
+}
+
+/** Finds source-local rows through a per-snapshot index, including on large relationship tables. */
+export function findSnapshotRowByLocalId(
+  snapshot: UserDataSnapshot,
+  tableName: string,
+  idColumn: string,
+  id: SqlValue | undefined,
+): UserDataRow | undefined {
+  return findByLocalId(snapshot, tableName, idColumn, id);
+}
+
+/** Returns duplicate counts from the snapshot's precomputed BlockRange identity index. */
+export function blockRangeIdentityCount(snapshot: UserDataSnapshot, key: string | null): number {
+  return key === null ? 0 : getSnapshotIdentityIndexes(snapshot).blockRangeCounts.get(key) ?? 0;
 }
 
 function locationCandidate(row: UserDataRow | undefined): string | null {
